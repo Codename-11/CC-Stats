@@ -20,6 +20,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.9] - 2026-03-15
+
+### Changed
+
+- fix: adaptive gap detection for poll interval changes (Story 19.1) (#100)
+
 ## [1.4.8] - 2026-03-06
 
 ### Changed
@@ -234,7 +240,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Launch at login via SMAppService
 - Xcode project with XcodeGen configuration
 
-[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.4.8...HEAD
+[Unreleased]: https://github.com/rajish/cc-hdrm/compare/v1.4.9...HEAD
+[1.4.9]: https://github.com/rajish/cc-hdrm/compare/v1.4.8...v1.4.9
 [1.4.8]: https://github.com/rajish/cc-hdrm/compare/v1.4.7...v1.4.8
 [1.4.7]: https://github.com/rajish/cc-hdrm/compare/v1.4.6...v1.4.7
 [1.4.6]: https://github.com/rajish/cc-hdrm/compare/v1.4.5...v1.4.6
