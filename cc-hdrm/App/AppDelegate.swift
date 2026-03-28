@@ -18,8 +18,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var oauthKeychainService: OAuthKeychainService?
     private var apiClient: (any APIClientProtocol)?
     private var slopeCalculationService: SlopeCalculationService?
+    private var claudeCodeLogParser: (any ClaudeCodeLogParserProtocol)?
     private var historicalDataServiceRef: HistoricalDataService?
     private var headroomAnalysisServiceRef: (any HeadroomAnalysisServiceProtocol)?
+    private var benchmarkServiceRef: BenchmarkService?
+    private var tppStorageServiceRef: TPPStorageService?
+    private var backfillServiceRef: HistoricalTPPBackfillService?
     private var analyticsWindow: AnalyticsWindow?
     private var observationTask: Task<Void, Never>?
     private var onboardingWindowController: OnboardingWindowController?
@@ -130,6 +134,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let apiClientInstance = APIClient()
             self.apiClient = apiClientInstance
 
+            // Create TPPStorageService, log parser, and PassiveTPPEngine before PollingEngine (Story 20.3)
+            let tppStorage = TPPStorageService(databaseManager: DatabaseManager.shared)
+            self.tppStorageServiceRef = tppStorage
+
+            let logParser = ClaudeCodeLogParser(dataRetentionDays: preferences.dataRetentionDays)
+            self.claudeCodeLogParser = logParser
+
+            let passiveEngine = PassiveTPPEngine(logParser: logParser, tppStorage: tppStorage)
+
+            let backfillService = HistoricalTPPBackfillService(
+                historicalDataService: historicalDataService,
+                logParser: logParser,
+                tppStorage: tppStorage,
+                preferencesManager: preferences
+            )
+            self.backfillServiceRef = backfillService
+
             pollingEngine = PollingEngine(
                 keychainService: oauthKC,
                 tokenRefreshService: TokenRefreshService(),
@@ -141,8 +162,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 slopeCalculationService: slopeService,
                 patternDetector: patternDetector,
                 patternNotificationService: patternNotifService,
-                extraUsageAlertService: extraUsageAlertService
+                extraUsageAlertService: extraUsageAlertService,
+                passiveTPPEngine: passiveEngine,
+                claudeCodeLogParser: logParser
             )
+        }
+
+        // Create BenchmarkService (Story 20.1) — TPPStorageService created above
+        if let histService = historicalDataServiceRef, let pollingEngine, let tppStorage = tppStorageServiceRef {
+            let benchmarkSvc = BenchmarkService(
+                appState: state,
+                keychainService: oauthKeychainService ?? OAuthKeychainService(),
+                pollingEngine: pollingEngine,
+                tppStorageService: tppStorage,
+                historicalDataService: histService
+            )
+            self.benchmarkServiceRef = benchmarkSvc
         }
 
         // Configure AnalyticsWindow with AppState, HistoricalDataService, HeadroomAnalysisService, pattern detection, and tier recommendations
@@ -161,7 +196,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 headroomAnalysisService: headroomService,
                 patternDetector: analyticsPatternDetector,
                 tierRecommendationService: tierRecommendationService,
-                preferencesManager: preferences
+                preferencesManager: preferences,
+                benchmarkService: benchmarkServiceRef,
+                tppStorageService: tppStorageServiceRef
             )
         }
 
@@ -171,7 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pop.behavior = .transient
         // Task wrapper required: onThresholdChange is a synchronous closure (called from SwiftUI
         // .onChange), but reevaluateThresholds() is async — Task bridges sync→async context.
-        pop.contentViewController = NSHostingController(rootView: PopoverView(appState: state, preferencesManager: preferences, launchAtLoginService: launchAtLoginService!, historicalDataService: historicalDataServiceRef, onThresholdChange: { [weak self] in
+        pop.contentViewController = NSHostingController(rootView: PopoverView(appState: state, preferencesManager: preferences, launchAtLoginService: launchAtLoginService!, historicalDataService: historicalDataServiceRef, backfillService: backfillServiceRef, onThresholdChange: { [weak self] in
             guard let self else { return }
             Task { @MainActor in
                 await self.notificationService?.reevaluateThresholds()
@@ -275,6 +312,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Fire-and-forget update check — do not block app launch
         Task {
             await updateCheckService?.checkForUpdate()
+        }
+
+        // Fire-and-forget initial log parser scan + backfill (parser created earlier with PollingEngine services)
+        if let logParser = claudeCodeLogParser {
+            let backfillSvc = self.backfillServiceRef
+            Task {
+                await logParser.scan()
+                Self.logger.info("Claude Code log parser initial scan complete")
+                // Run historical TPP backfill after log data is loaded
+                await backfillSvc?.runBackfillIfNeeded()
+            }
         }
     }
 
