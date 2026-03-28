@@ -20,6 +20,14 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Building version: $TAG"
+
       - name: Restore
         run: dotnet restore windows/CCStats.Windows.sln
 
@@ -31,6 +39,9 @@ jobs:
             --self-contained `
             -p:PublishSingleFile=true `
             -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:Version=${{ steps.version.outputs.version }} `
+            -p:AssemblyVersion=${{ steps.version.outputs.version }}.0 `
+            -p:FileVersion=${{ steps.version.outputs.version }}.0 `
             --output ./release
 
       - name: Upload build artifact
@@ -48,6 +59,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Download Windows artifacts
         uses: actions/download-artifact@v4
@@ -58,7 +71,22 @@ jobs:
       - name: Rename artifact
         run: mv artifacts/CCStats.exe artifacts/CCStats-${{ github.ref_name }}-win-x64.exe
 
-      - name: Check for release notes
+      - name: Generate release notes
+        id: notes
+        run: |
+          # Get commits since last tag
+          PREV_TAG=$(git tag --sort=-creatordate | head -2 | tail -1)
+          if [ -z "$PREV_TAG" ] || [ "$PREV_TAG" = "${{ github.ref_name }}" ]; then
+            PREV_TAG=$(git rev-list --max-parents=0 HEAD)
+          fi
+          echo "## Changes since $PREV_TAG" > generated-notes.md
+          echo "" >> generated-notes.md
+          git log --pretty=format:"- %s" "$PREV_TAG".."${{ github.ref_name }}" -- windows/ .github/ README.md CHANGELOG.md TODO.md >> generated-notes.md
+          echo "" >> generated-notes.md
+          echo "" >> generated-notes.md
+          echo "**Full changelog**: https://github.com/${{ github.repository }}/compare/$PREV_TAG...${{ github.ref_name }}" >> generated-notes.md
+
+      - name: Check for manual release notes
         id: release_notes
         run: |
           if [ -f RELEASE_NOTES.md ]; then
@@ -71,7 +99,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
-          prerelease: ${{ contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') || contains(github.ref_name, '-rc') }}
+          prerelease: false
           make_latest: true
-          body_path: ${{ steps.release_notes.outputs.has_notes == 'true' && 'RELEASE_NOTES.md' || '' }}
-          generate_release_notes: ${{ steps.release_notes.outputs.has_notes != 'true' }}
+          body_path: ${{ steps.release_notes.outputs.has_notes == 'true' && 'RELEASE_NOTES.md' || 'generated-notes.md' }}
