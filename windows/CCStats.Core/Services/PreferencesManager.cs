@@ -140,6 +140,48 @@ public sealed class PreferencesManager
         set { _data.DismissedVersion = value; Save(); }
     }
 
+    public string? LastExtraUsagePeriodKey
+    {
+        get => _data.LastExtraUsagePeriodKey;
+        set { _data.LastExtraUsagePeriodKey = value; }
+    }
+
+    public bool ExtraUsage50Fired
+    {
+        get => _data.ExtraUsage50Fired;
+        set { _data.ExtraUsage50Fired = value; }
+    }
+
+    public bool ExtraUsage75Fired
+    {
+        get => _data.ExtraUsage75Fired;
+        set { _data.ExtraUsage75Fired = value; }
+    }
+
+    public bool ExtraUsage90Fired
+    {
+        get => _data.ExtraUsage90Fired;
+        set { _data.ExtraUsage90Fired = value; }
+    }
+
+    public bool ExtraUsageEnteredFired
+    {
+        get => _data.ExtraUsageEnteredFired;
+        set { _data.ExtraUsageEnteredFired = value; }
+    }
+
+    public List<string> DismissedPatternFindings
+    {
+        get => _data.DismissedPatternFindings;
+        set { _data.DismissedPatternFindings = value; }
+    }
+
+    public string? DismissedTierRecommendation
+    {
+        get => _data.DismissedTierRecommendation;
+        set { _data.DismissedTierRecommendation = value; }
+    }
+
     public void Load()
     {
         if (!File.Exists(_filePath))
@@ -229,5 +271,12 @@ public sealed class PreferencesManager
         public bool AdaptivePolling { get; set; } = true;
         public bool HasCompletedOnboarding { get; set; }
         public string? DismissedVersion { get; set; }
+        public string? LastExtraUsagePeriodKey { get; set; }
+        public bool ExtraUsage50Fired { get; set; }
+        public bool ExtraUsage75Fired { get; set; }
+        public bool ExtraUsage90Fired { get; set; }
+        public bool ExtraUsageEnteredFired { get; set; }
+        public List<string> DismissedPatternFindings { get; set; } = new();
+        public string? DismissedTierRecommendation { get; set; }
     }
 }

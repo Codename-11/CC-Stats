@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Runtime.Versioning;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -40,6 +41,7 @@ public partial class App : Application
     private UpdateCheckService? _updateCheckService;
 
     private int _lastPollIntervalSeconds;
+    private bool _wasDisconnected;
     private readonly List<double> _inMemorySparkline = new();
     private DateTimeOffset _lastAccountLoadTime = DateTimeOffset.MinValue;
     private static readonly TimeSpan AccountLoadThrottle = TimeSpan.FromMinutes(5);
@@ -146,6 +148,17 @@ public partial class App : Application
 
         // --- Connect services to ViewModel ---
         _viewModel!.ConnectServices(_oauthService, _pollingEngine, _preferences, _secureStorage, _database);
+
+        // --- Wire pattern dismissal persistence ---
+        _viewModel.Analytics.SetDismissedPatterns(_preferences.DismissedPatternFindings);
+        _viewModel.Analytics.PatternDismissed += (_, title) =>
+        {
+            if (!_preferences.DismissedPatternFindings.Contains(title))
+            {
+                _preferences.DismissedPatternFindings.Add(title);
+                _preferences.Save();
+            }
+        };
 
         // --- Auto-start if credentials exist ---
         var credentials = _secureStorage.LoadCredentials();
@@ -289,6 +302,13 @@ public partial class App : Application
             {
                 _viewModel!.ApplyState(stateWithSparkline);
 
+                // Detect connectivity recovery
+                if (_wasDisconnected && stateWithSparkline.ConnectionStatus == ConnectionStatus.Connected)
+                {
+                    _notificationService?.ShowApiStatusAlert("Claude API is back online");
+                }
+                _wasDisconnected = stateWithSparkline.ConnectionStatus == ConnectionStatus.Disconnected;
+
                 // Check headroom thresholds for notifications
                 CheckHeadroomThresholds(stateWithSparkline);
 
@@ -304,6 +324,7 @@ public partial class App : Application
                 {
                     _lastAccountLoadTime = now;
                     _viewModel.LoadAccounts();
+                    RefreshTrayAccountMenu();
                 }
             });
           }
@@ -341,15 +362,53 @@ public partial class App : Application
             _notificationService.ShowThresholdAlert(headroomState, fiveHourHeadroom.Value);
         }
 
-        // Check extra usage thresholds
+        // Billing period key: "YYYY-MM-dd" based on billing cycle day
+        var billingDay = _preferences.BillingCycleDay > 0 ? _preferences.BillingCycleDay : 1;
+        var now = DateTime.Now;
+        var periodStart = now.Day >= billingDay
+            ? new DateTime(now.Year, now.Month, billingDay)
+            : new DateTime(now.Year, now.Month, billingDay).AddMonths(-1);
+        var periodKey = periodStart.ToString("yyyy-MM-dd");
+
+        if (_preferences.LastExtraUsagePeriodKey != periodKey)
+        {
+            _preferences.LastExtraUsagePeriodKey = periodKey;
+            _preferences.ExtraUsage50Fired = false;
+            _preferences.ExtraUsage75Fired = false;
+            _preferences.ExtraUsage90Fired = false;
+            _preferences.ExtraUsageEnteredFired = false;
+            _preferences.Save();
+        }
+
+        // Check extra usage thresholds (billing-period-aware, fires once per period)
         if (state.ExtraUsageEnabled && state.ExtraUsageUtilization is { } extraUtil)
         {
-            if (extraUtil >= 0.9 && _preferences.ExtraUsageAlert90)
+            if (extraUtil >= 0.9 && _preferences.ExtraUsageAlert90 && !_preferences.ExtraUsage90Fired)
+            {
                 _notificationService.ShowExtraUsageAlert(ExtraUsageAlertLevel.Ninety, extraUtil * 100);
-            else if (extraUtil >= 0.75 && _preferences.ExtraUsageAlert75)
+                _preferences.ExtraUsage90Fired = true;
+                _preferences.Save();
+            }
+            else if (extraUtil >= 0.75 && _preferences.ExtraUsageAlert75 && !_preferences.ExtraUsage75Fired)
+            {
                 _notificationService.ShowExtraUsageAlert(ExtraUsageAlertLevel.SeventyFive, extraUtil * 100);
-            else if (extraUtil >= 0.5 && _preferences.ExtraUsageAlert50)
+                _preferences.ExtraUsage75Fired = true;
+                _preferences.Save();
+            }
+            else if (extraUtil >= 0.5 && _preferences.ExtraUsageAlert50 && !_preferences.ExtraUsage50Fired)
+            {
                 _notificationService.ShowExtraUsageAlert(ExtraUsageAlertLevel.Fifty, extraUtil * 100);
+                _preferences.ExtraUsage50Fired = true;
+                _preferences.Save();
+            }
+        }
+
+        // Entered extra usage alert (once per billing period)
+        if (state.IsExtraUsageActive && !_preferences.ExtraUsageEnteredFired)
+        {
+            _notificationService.ShowEnteredExtraUsageAlert();
+            _preferences.ExtraUsageEnteredFired = true;
+            _preferences.Save();
         }
     }
 
@@ -546,6 +605,7 @@ public partial class App : Application
             SubscriptionTier = creds.DisplayName ?? "Switching...",
         });
         _viewModel?.LoadAccounts();
+        RefreshTrayAccountMenu();
 
         // Start polling and force immediate data fetch
         _pollingEngine.Start();
@@ -553,6 +613,18 @@ public partial class App : Application
 
         _trayIconService?.UpdateIcon(0, CCStats.Core.Models.HeadroomState.Disconnected,
             $"CC-Stats — {creds.DisplayName ?? accountId}");
+    }
+
+    private void RefreshTrayAccountMenu()
+    {
+        _trayIconService?.UpdateAccountMenu(
+            _viewModel?.Settings?.Accounts.Select(a => new AccountInfo
+            {
+                Id = a.AccountId,
+                DisplayName = a.DisplayName,
+                IsActive = a.IsActive,
+            }).ToList() ?? new List<AccountInfo>(),
+            accountId => Dispatcher.UIThread.Post(() => OnSwitchAccountRequested(null, accountId)));
     }
 
     private async System.Threading.Tasks.Task ForceImmediatePollAsync()

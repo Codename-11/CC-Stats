@@ -128,6 +128,13 @@
                                  Watermark="auto" Width="90" Height="30" FontSize="12" />
                     </ui:SettingsExpanderItem.Footer>
                 </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="Monthly price ($)"
+                                         Description="For dollar value calculations">
+                    <ui:SettingsExpanderItem.Footer>
+                        <TextBox Text="{Binding Settings.MonthlyPrice}"
+                                 Watermark="auto" Width="90" Height="30" FontSize="12" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
                 <ui:SettingsExpanderItem Content="Billing cycle day">
                     <ui:SettingsExpanderItem.Footer>
                         <ComboBox ItemsSource="{Binding Settings.BillingCycleDayOptions}"
@@ -160,7 +167,8 @@
                 </ui:SettingsExpander.Footer>
                 <ui:SettingsExpanderItem Content="Clear all data">
                     <ui:SettingsExpanderItem.Footer>
-                        <Button Content="Clear" Command="{Binding Settings.ClearDatabaseCommand}"
+                        <Button Content="{Binding Settings.ClearButtonText}"
+                                Command="{Binding Settings.ClearDatabaseCommand}"
                                 FontSize="12" Padding="10,4" />
                     </ui:SettingsExpanderItem.Footer>
                 </ui:SettingsExpanderItem>
@@ -235,6 +243,15 @@
                             FontSize="12" Padding="0,4"
                             HorizontalAlignment="Left" BorderThickness="0" />
                 </StackPanel>
+            </Border>
+
+            <!-- Reset to Defaults -->
+            <Border Margin="0,4,0,0" Padding="12,6">
+                <Button Content="Reset to Defaults"
+                        Command="{Binding Settings.ResetToDefaultsCommand}"
+                        Background="Transparent" Foreground="#6B7A8D"
+                        FontSize="12" Padding="0"
+                        HorizontalAlignment="Left" BorderThickness="0" />
             </Border>
 
             <!-- Quit -->

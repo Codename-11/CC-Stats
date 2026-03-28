@@ -68,8 +68,10 @@ public sealed class SettingsViewModel : ViewModelBase
     private string _selectedBillingCycleDay = "Not set";
     private bool _adaptivePolling = true;
     private bool _launchAtLogin;
+    private string _monthlyPrice = string.Empty;
     private string _databaseSize = "Not available"; // TODO: Wire DatabaseManager.GetDatabaseSizeAsync() when available
     private bool _showClearDatabase;
+    private bool _clearDatabaseConfirmPending;
 
     public SettingsViewModel()
     {
@@ -78,6 +80,7 @@ public sealed class SettingsViewModel : ViewModelBase
         PruneDatabaseCommand = ReactiveCommand.Create(OnPruneDatabase);
         SwitchAccountCommand = ReactiveCommand.Create<string>(OnSwitchAccount);
         RemoveAccountCommand = ReactiveCommand.Create<string>(OnRemoveAccount);
+        ResetToDefaultsCommand = ReactiveCommand.Create(OnResetToDefaults);
     }
 
     // --- Multi-account ---
@@ -172,6 +175,13 @@ public sealed class SettingsViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _sevenDayCreditLimit, value);
     }
 
+    // Monthly price
+    public string MonthlyPrice
+    {
+        get => _monthlyPrice;
+        set => this.RaiseAndSetIfChanged(ref _monthlyPrice, value);
+    }
+
     // Billing cycle day
     public List<string> BillingCycleDayOptions { get; } = CreateBillingCycleDayOptions();
 
@@ -201,16 +211,36 @@ public sealed class SettingsViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _showClearDatabase, value);
     }
 
+    public bool ClearDatabaseConfirmPending
+    {
+        get => _clearDatabaseConfirmPending;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _clearDatabaseConfirmPending, value);
+            this.RaisePropertyChanged(nameof(ClearButtonText));
+        }
+    }
+
+    public string ClearButtonText => ClearDatabaseConfirmPending ? "Confirm?" : "Clear";
+
     public ReactiveCommand<Unit, Unit> ClearDatabaseCommand { get; }
     public ReactiveCommand<Unit, Unit> ExportDatabaseCommand { get; }
     public ReactiveCommand<Unit, Unit> PruneDatabaseCommand { get; }
     public ReactiveCommand<string, Unit> SwitchAccountCommand { get; }
     public ReactiveCommand<string, Unit> RemoveAccountCommand { get; }
+    public ReactiveCommand<Unit, Unit> ResetToDefaultsCommand { get; }
 
     private void OnClearDatabase()
     {
-        // Will be wired to actual database clear logic
-        DatabaseSize = "0 KB";
+        if (!ClearDatabaseConfirmPending)
+        {
+            ClearDatabaseConfirmPending = true;
+            DatabaseSize = "Click again to confirm";
+            return;
+        }
+        // Actually clear
+        ClearDatabaseConfirmPending = false;
+        DatabaseSize = "Cleared";
         ShowClearDatabase = false;
     }
 
@@ -234,6 +264,25 @@ public sealed class SettingsViewModel : ViewModelBase
     private void OnRemoveAccount(string accountId)
     {
         AccountRemoveRequested?.Invoke(this, accountId);
+    }
+
+    private void OnResetToDefaults()
+    {
+        WarningThreshold = 20;
+        CriticalThreshold = 5;
+        ApiStatusAlerts = true;
+        ExtraUsageAlerts = false;
+        ExtraUsageAlert50 = true;
+        ExtraUsageAlert75 = true;
+        ExtraUsageAlert90 = true;
+        AdaptivePolling = true;
+        SelectedPollInterval = "1m";
+        SelectedDataRetention = "1y";
+        FiveHourCreditLimit = "";
+        SevenDayCreditLimit = "";
+        MonthlyPrice = "";
+        SelectedBillingCycleDay = "Not set";
+        LaunchAtLogin = false;
     }
 
     private static List<string> CreateBillingCycleDayOptions()

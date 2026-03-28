@@ -790,6 +790,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 
         _settings.FiveHourCreditLimit = _preferences.CustomFiveHourCredits?.ToString() ?? string.Empty;
         _settings.SevenDayCreditLimit = _preferences.CustomSevenDayCredits?.ToString() ?? string.Empty;
+        _settings.MonthlyPrice = _preferences.CustomMonthlyPrice?.ToString() ?? string.Empty;
     }
 
     // --- Multi-account loading ---
@@ -938,6 +939,11 @@ public sealed class MainWindowViewModel : ViewModelBase
                 case nameof(SettingsViewModel.SevenDayCreditLimit):
                     _preferences.CustomSevenDayCredits = int.TryParse(_settings.SevenDayCreditLimit, out var c7)
                         ? c7
+                        : null;
+                    break;
+                case nameof(SettingsViewModel.MonthlyPrice):
+                    _preferences.CustomMonthlyPrice = double.TryParse(_settings.MonthlyPrice, out var mp)
+                        ? mp
                         : null;
                     break;
             }

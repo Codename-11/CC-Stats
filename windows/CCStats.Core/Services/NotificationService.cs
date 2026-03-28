@@ -56,6 +56,13 @@ public sealed class NotificationService
         RaiseNotification(key, title, body);
     }
 
+    public void ShowEnteredExtraUsageAlert()
+    {
+        RaiseNotification("entered_extra_usage",
+            "Entered Extra Usage",
+            "Your plan quota is exhausted. Additional usage is being billed at overage rates.");
+    }
+
     public void ShowApiStatusAlert(string message)
     {
         var key = "api_status";

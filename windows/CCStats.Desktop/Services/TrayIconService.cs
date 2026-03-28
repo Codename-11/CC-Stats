@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Avalonia;
 using Avalonia.Controls;
@@ -8,6 +9,16 @@ using CCStats.Core.Models;
 using CCStats.Desktop.Controls;
 
 namespace CCStats.Desktop.Services;
+
+/// <summary>
+/// Lightweight account descriptor for the tray context menu.
+/// </summary>
+public sealed class AccountInfo
+{
+    public string Id { get; init; } = "";
+    public string DisplayName { get; init; } = "";
+    public bool IsActive { get; init; }
+}
 
 /// <summary>
 /// Manages the system tray icon with a dynamically rendered gauge that reflects
@@ -20,6 +31,9 @@ public sealed class TrayIconService : IDisposable
     private Window? _window;
     private bool _disposed;
     private NativeMenuItem? _statusItem;
+    private NativeMenuItem? _accountsMenuItem;
+    private NativeMenu? _accountsSubmenu;
+    private Action<string>? _onAccountSwitch;
 
     private Action? _onAnalyticsRequested;
     private Action? _onSettingsRequested;
@@ -89,6 +103,13 @@ public sealed class TrayIconService : IDisposable
             service._onSettingsRequested?.Invoke();
         };
         menu.Add(settingsItem);
+
+        // Accounts submenu
+        menu.Add(new NativeMenuItemSeparator());
+        var accountsSubmenu = new NativeMenu();
+        service._accountsSubmenu = accountsSubmenu;
+        service._accountsMenuItem = new NativeMenuItem("Accounts") { Menu = accountsSubmenu };
+        menu.Add(service._accountsMenuItem);
 
         menu.Add(new NativeMenuItemSeparator());
 
@@ -208,6 +229,34 @@ public sealed class TrayIconService : IDisposable
         var y = workArea.Bottom - winHeight - gap;
 
         window.Position = new PixelPoint(x, y);
+    }
+
+    /// <summary>
+    /// Rebuilds the account submenu with the current account list.
+    /// The active account is shown with a filled circle and disabled;
+    /// inactive accounts trigger the switch callback when clicked.
+    /// </summary>
+    public void UpdateAccountMenu(IReadOnlyList<AccountInfo> accounts, Action<string> onSwitch)
+    {
+        if (_accountsSubmenu is null) return;
+        _onAccountSwitch = onSwitch;
+        _accountsSubmenu.Items.Clear();
+
+        foreach (var account in accounts)
+        {
+            var prefix = account.IsActive ? "● " : "○ ";
+            var item = new NativeMenuItem($"{prefix}{account.DisplayName}");
+            if (!account.IsActive)
+            {
+                var accountId = account.Id; // capture for closure
+                item.Click += (_, _) => _onAccountSwitch?.Invoke(accountId);
+            }
+            else
+            {
+                item.IsEnabled = false; // can't switch to already-active account
+            }
+            _accountsSubmenu.Items.Add(item);
+        }
     }
 
     public void Dispose()

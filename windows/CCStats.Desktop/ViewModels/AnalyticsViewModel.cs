@@ -22,10 +22,18 @@ public sealed class AnalyticsViewModel : ViewModelBase
     private bool _showSevenDay = true;
     private IReadOnlyList<double> _sparklineData = Array.Empty<double>();
     private AppState? _appState;
+    private HashSet<string> _dismissedPatterns = new();
+
+    public event EventHandler<string>? PatternDismissed;
 
     public AnalyticsViewModel()
     {
         SelectTimeRangeCommand = ReactiveCommand.Create<string>(OnSelectTimeRange);
+    }
+
+    public void SetDismissedPatterns(IEnumerable<string> dismissed)
+    {
+        _dismissedPatterns = new HashSet<string>(dismissed);
     }
 
     /// <summary>
@@ -596,12 +604,19 @@ public sealed class AnalyticsViewModel : ViewModelBase
 
     private void AddPatternCard(string title, string summary)
     {
+        if (_dismissedPatterns.Contains(title)) return; // skip dismissed
+
         var card = new PatternCardViewModel
         {
             Title = title,
             Summary = summary,
         };
-        card.DismissCommand = ReactiveCommand.Create(() => { PatternCards.Remove(card); });
+        card.DismissCommand = ReactiveCommand.Create(() =>
+        {
+            _dismissedPatterns.Add(title);
+            PatternCards.Remove(card);
+            PatternDismissed?.Invoke(this, title);
+        });
         PatternCards.Add(card);
     }
 
