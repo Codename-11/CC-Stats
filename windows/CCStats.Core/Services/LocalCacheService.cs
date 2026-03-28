@@ -36,7 +36,7 @@ public static class LocalCacheService
                 if (DateTimeOffset.TryParse(fetchedAtProp.GetString(), out var fetchedAt))
                 {
                     var age = DateTimeOffset.UtcNow - fetchedAt;
-                    var limit = maxAge ?? TimeSpan.FromMinutes(10);
+                    var limit = maxAge ?? TimeSpan.FromMinutes(30);
                     if (age > limit) return null; // too stale
                 }
             }

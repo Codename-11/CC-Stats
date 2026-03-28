@@ -116,11 +116,18 @@ public sealed class PollingEngine : IDisposable
 
             try
             {
-                var seconds = _preferences.AdaptivePolling
-                    ? SessionDetectionService.GetAdaptiveInterval(_preferences.PollIntervalSeconds)
-                    : _preferences.PollIntervalSeconds;
-                var interval = TimeSpan.FromSeconds(seconds);
-                await Task.Delay(interval, cancellationToken);
+                int seconds;
+                try
+                {
+                    seconds = _preferences.AdaptivePolling
+                        ? SessionDetectionService.GetAdaptiveInterval(_preferences.PollIntervalSeconds)
+                        : _preferences.PollIntervalSeconds;
+                }
+                catch
+                {
+                    seconds = _preferences.PollIntervalSeconds; // fallback if session detection fails
+                }
+                await Task.Delay(TimeSpan.FromSeconds(Math.Max(10, seconds)), cancellationToken);
             }
             catch (OperationCanceledException)
             {
