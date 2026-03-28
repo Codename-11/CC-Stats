@@ -31,3 +31,19 @@ Package.resolved
 .DS_Store
 *.swp
 *~
+
+# .NET / Avalonia
+**/bin/
+**/obj/
+.vs/
+*.user
+publish/
+release/
+
+# App data
+*.dat
+*.db
+*.sqlite
+
+# SubFrame
+.subframe/

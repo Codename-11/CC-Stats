@@ -1,0 +1,255 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Globalization;
+using System.Reactive;
+using Avalonia.Data.Converters;
+using Avalonia.Media;
+using ReactiveUI;
+
+namespace CCStats.Desktop.ViewModels;
+
+/// <summary>
+/// Converts a boolean IsActive flag to a green (active) or gray (inactive) brush.
+/// </summary>
+public sealed class AccountActiveColorConverter : IValueConverter
+{
+    public static readonly AccountActiveColorConverter Instance = new();
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        var isActive = value is true;
+        return new SolidColorBrush(isActive ? Color.Parse("#66B866") : Color.Parse("#4A5568"));
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        => throw new NotSupportedException();
+}
+
+public sealed class AccountItemViewModel : ViewModelBase
+{
+    private string _displayName = "";
+
+    public string AccountId { get; init; } = "";
+
+    /// <summary>Fires when the display name is changed by the user.</summary>
+    public event EventHandler<string>? NameChanged;
+
+    public string DisplayName
+    {
+        get => _displayName;
+        set
+        {
+            if (this.RaiseAndSetIfChanged(ref _displayName, value) is not null)
+            {
+                NameChanged?.Invoke(this, value);
+            }
+        }
+    }
+
+    public string TierLabel { get; init; } = "";
+    public bool IsActive { get; init; }
+}
+
+public sealed class SettingsViewModel : ViewModelBase
+{
+    private int _warningThreshold = 20;
+    private int _criticalThreshold = 5;
+    private bool _apiStatusAlerts = true;
+    private bool _extraUsageAlerts;
+    private bool _extraUsageAlert50;
+    private bool _extraUsageAlert75;
+    private bool _extraUsageAlert90;
+    private bool _extraUsageAlertEntered;
+    private string _selectedPollInterval = "30s";
+    private string _selectedDataRetention = "90d";
+    private string _fiveHourCreditLimit = string.Empty;
+    private string _sevenDayCreditLimit = string.Empty;
+    private string _selectedBillingCycleDay = "Not set";
+    private bool _adaptivePolling = true;
+    private bool _launchAtLogin;
+    private string _databaseSize = "Not available"; // TODO: Wire DatabaseManager.GetDatabaseSizeAsync() when available
+    private bool _showClearDatabase;
+
+    public SettingsViewModel()
+    {
+        ClearDatabaseCommand = ReactiveCommand.Create(OnClearDatabase);
+        ExportDatabaseCommand = ReactiveCommand.Create(OnExportDatabase);
+        PruneDatabaseCommand = ReactiveCommand.Create(OnPruneDatabase);
+        SwitchAccountCommand = ReactiveCommand.Create<string>(OnSwitchAccount);
+        RemoveAccountCommand = ReactiveCommand.Create<string>(OnRemoveAccount);
+    }
+
+    // --- Multi-account ---
+
+    public event EventHandler<string>? AccountSwitchRequested;
+    public event EventHandler<string>? AccountRemoveRequested;
+
+    public ObservableCollection<AccountItemViewModel> Accounts { get; } = new();
+
+    // Alert thresholds
+    public int WarningThreshold
+    {
+        get => _warningThreshold;
+        set => this.RaiseAndSetIfChanged(ref _warningThreshold, Math.Clamp(value, 6, 50));
+    }
+
+    public int CriticalThreshold
+    {
+        get => _criticalThreshold;
+        set => this.RaiseAndSetIfChanged(ref _criticalThreshold, Math.Clamp(value, 1, 49));
+    }
+
+    // API status alerts
+    public bool ApiStatusAlerts
+    {
+        get => _apiStatusAlerts;
+        set => this.RaiseAndSetIfChanged(ref _apiStatusAlerts, value);
+    }
+
+    // Extra usage alerts
+    public bool ExtraUsageAlerts
+    {
+        get => _extraUsageAlerts;
+        set => this.RaiseAndSetIfChanged(ref _extraUsageAlerts, value);
+    }
+
+    public bool ExtraUsageAlert50
+    {
+        get => _extraUsageAlert50;
+        set => this.RaiseAndSetIfChanged(ref _extraUsageAlert50, value);
+    }
+
+    public bool ExtraUsageAlert75
+    {
+        get => _extraUsageAlert75;
+        set => this.RaiseAndSetIfChanged(ref _extraUsageAlert75, value);
+    }
+
+    public bool ExtraUsageAlert90
+    {
+        get => _extraUsageAlert90;
+        set => this.RaiseAndSetIfChanged(ref _extraUsageAlert90, value);
+    }
+
+    public bool ExtraUsageAlertEntered
+    {
+        get => _extraUsageAlertEntered;
+        set => this.RaiseAndSetIfChanged(ref _extraUsageAlertEntered, value);
+    }
+
+    // Adaptive polling
+    public bool AdaptivePolling
+    {
+        get => _adaptivePolling;
+        set => this.RaiseAndSetIfChanged(ref _adaptivePolling, value);
+    }
+
+    // Poll interval
+    public List<string> PollIntervalOptions { get; } =
+        ["10s", "15s", "30s", "1m", "2m", "5m", "10m", "15m", "30m"];
+
+    public string SelectedPollInterval
+    {
+        get => _selectedPollInterval;
+        set => this.RaiseAndSetIfChanged(ref _selectedPollInterval, value);
+    }
+
+    // Data retention
+    public List<string> DataRetentionOptions { get; } =
+        ["30d", "90d", "180d", "1y", "2y", "5y"];
+
+    public string SelectedDataRetention
+    {
+        get => _selectedDataRetention;
+        set => this.RaiseAndSetIfChanged(ref _selectedDataRetention, value);
+    }
+
+    // Custom credit limits
+    public string FiveHourCreditLimit
+    {
+        get => _fiveHourCreditLimit;
+        set => this.RaiseAndSetIfChanged(ref _fiveHourCreditLimit, value);
+    }
+
+    public string SevenDayCreditLimit
+    {
+        get => _sevenDayCreditLimit;
+        set => this.RaiseAndSetIfChanged(ref _sevenDayCreditLimit, value);
+    }
+
+    // Billing cycle day
+    public List<string> BillingCycleDayOptions { get; } = CreateBillingCycleDayOptions();
+
+    public string SelectedBillingCycleDay
+    {
+        get => _selectedBillingCycleDay;
+        set => this.RaiseAndSetIfChanged(ref _selectedBillingCycleDay, value);
+    }
+
+    // Launch at login
+    public bool LaunchAtLogin
+    {
+        get => _launchAtLogin;
+        set => this.RaiseAndSetIfChanged(ref _launchAtLogin, value);
+    }
+
+    // Database
+    public string DatabaseSize
+    {
+        get => _databaseSize;
+        set => this.RaiseAndSetIfChanged(ref _databaseSize, value);
+    }
+
+    public bool ShowClearDatabase
+    {
+        get => _showClearDatabase;
+        set => this.RaiseAndSetIfChanged(ref _showClearDatabase, value);
+    }
+
+    public ReactiveCommand<Unit, Unit> ClearDatabaseCommand { get; }
+    public ReactiveCommand<Unit, Unit> ExportDatabaseCommand { get; }
+    public ReactiveCommand<Unit, Unit> PruneDatabaseCommand { get; }
+    public ReactiveCommand<string, Unit> SwitchAccountCommand { get; }
+    public ReactiveCommand<string, Unit> RemoveAccountCommand { get; }
+
+    private void OnClearDatabase()
+    {
+        // Will be wired to actual database clear logic
+        DatabaseSize = "0 KB";
+        ShowClearDatabase = false;
+    }
+
+    private void OnExportDatabase()
+    {
+        // TODO: Will be wired to actual export logic
+        DatabaseSize = "Export coming soon";
+    }
+
+    private void OnPruneDatabase()
+    {
+        // TODO: Will be wired to actual prune logic
+        DatabaseSize = "Pruning...";
+    }
+
+    private void OnSwitchAccount(string accountId)
+    {
+        AccountSwitchRequested?.Invoke(this, accountId);
+    }
+
+    private void OnRemoveAccount(string accountId)
+    {
+        AccountRemoveRequested?.Invoke(this, accountId);
+    }
+
+    private static List<string> CreateBillingCycleDayOptions()
+    {
+        var options = new List<string> { "Not set" };
+        for (var i = 1; i <= 28; i++)
+        {
+            options.Add(i.ToString());
+        }
+        return options;
+    }
+}

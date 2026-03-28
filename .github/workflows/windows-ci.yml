@@ -1,0 +1,39 @@
+name: CI (Windows)
+
+on:
+  push:
+    branches: [master, 'feature/**']
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build & Verify
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore windows/CCStats.Windows.sln
+
+      - name: Build
+        run: dotnet build windows/CCStats.Windows.sln --configuration Release --no-restore
+
+      - name: Publish (self-contained)
+        run: dotnet publish windows/CCStats.Desktop/CCStats.Desktop.csproj --configuration Release --runtime win-x64 --self-contained --output ./publish
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ccstats-windows-x64
+          path: publish/
+          if-no-files-found: error

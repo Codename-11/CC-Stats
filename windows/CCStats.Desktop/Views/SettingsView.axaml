@@ -1,0 +1,253 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CCStats.Desktop.ViewModels"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignWidth="320" d:DesignHeight="600"
+             x:Class="CCStats.Desktop.Views.SettingsView"
+             x:DataType="vm:MainWindowViewModel">
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="2" Margin="4,0,4,8">
+
+            <!-- Header -->
+            <Grid ColumnDefinitions="*,Auto" Margin="4,0,0,6">
+                <TextBlock Text="Settings" Classes="title" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Classes="gear"
+                        Command="{Binding CloseSettingsCommand}" ToolTip.Tip="Close">
+                    <TextBlock Text="✕" FontSize="14" Foreground="#8FA0B8" />
+                </Button>
+            </Grid>
+
+            <!-- Alert Thresholds -->
+            <ui:SettingsExpander Header="Alert Thresholds"
+                                Description="Get notified when headroom drops below these levels">
+                <ui:SettingsExpander.IconSource>
+                    <ui:SymbolIconSource Symbol="Important" />
+                </ui:SettingsExpander.IconSource>
+                <ui:SettingsExpanderItem Content="Warning %"
+                                         Description="Toast notification when headroom falls below this">
+                    <ui:SettingsExpanderItem.Footer>
+                        <NumericUpDown Value="{Binding Settings.WarningThreshold}"
+                                       Minimum="6" Maximum="50" FormatString="0"
+                                       Width="100" Height="30" FontSize="12" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="Critical %">
+                    <ui:SettingsExpanderItem.Footer>
+                        <NumericUpDown Value="{Binding Settings.CriticalThreshold}"
+                                       Minimum="1" Maximum="49" FormatString="0"
+                                       Width="100" Height="30" FontSize="12" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+            </ui:SettingsExpander>
+
+            <!-- Notifications -->
+            <ui:SettingsExpander Header="Notifications">
+                <ui:SettingsExpander.IconSource>
+                    <ui:SymbolIconSource Symbol="Alert" />
+                </ui:SettingsExpander.IconSource>
+                <ui:SettingsExpanderItem Content="API status alerts">
+                    <ui:SettingsExpanderItem.Footer>
+                        <ToggleSwitch IsChecked="{Binding Settings.ApiStatusAlerts}"
+                                      OnContent="" OffContent="" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="Extra usage alerts">
+                    <ui:SettingsExpanderItem.Footer>
+                        <ToggleSwitch IsChecked="{Binding Settings.ExtraUsageAlerts}"
+                                      OnContent="" OffContent="" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="  Alert at 50%"
+                                         IsVisible="{Binding Settings.ExtraUsageAlerts}">
+                    <ui:SettingsExpanderItem.Footer>
+                        <ToggleSwitch IsChecked="{Binding Settings.ExtraUsageAlert50}"
+                                      OnContent="" OffContent="" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="  Alert at 75%"
+                                         IsVisible="{Binding Settings.ExtraUsageAlerts}">
+                    <ui:SettingsExpanderItem.Footer>
+                        <ToggleSwitch IsChecked="{Binding Settings.ExtraUsageAlert75}"
+                                      OnContent="" OffContent="" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="  Alert at 90%"
+                                         IsVisible="{Binding Settings.ExtraUsageAlerts}">
+                    <ui:SettingsExpanderItem.Footer>
+                        <ToggleSwitch IsChecked="{Binding Settings.ExtraUsageAlert90}"
+                                      OnContent="" OffContent="" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+            </ui:SettingsExpander>
+
+            <!-- Polling -->
+            <ui:SettingsExpander Header="Polling">
+                <ui:SettingsExpander.IconSource>
+                    <ui:SymbolIconSource Symbol="Sync" />
+                </ui:SettingsExpander.IconSource>
+                <ui:SettingsExpanderItem Content="Poll interval">
+                    <ui:SettingsExpanderItem.Footer>
+                        <ComboBox ItemsSource="{Binding Settings.PollIntervalOptions}"
+                                  SelectedItem="{Binding Settings.SelectedPollInterval}"
+                                  Width="90" Height="30" FontSize="12" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="Adaptive polling"
+                                         Description="Auto-speeds to 15s when Claude Code is running, slows when idle">
+                    <ui:SettingsExpanderItem.Footer>
+                        <ToggleSwitch IsChecked="{Binding Settings.AdaptivePolling}"
+                                      OnContent="" OffContent="" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="Data retention">
+                    <ui:SettingsExpanderItem.Footer>
+                        <ComboBox ItemsSource="{Binding Settings.DataRetentionOptions}"
+                                  SelectedItem="{Binding Settings.SelectedDataRetention}"
+                                  Width="90" Height="30" FontSize="12" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+            </ui:SettingsExpander>
+
+            <!-- Custom Limits -->
+            <ui:SettingsExpander Header="Custom Limits">
+                <ui:SettingsExpander.IconSource>
+                    <ui:SymbolIconSource Symbol="Calculator" />
+                </ui:SettingsExpander.IconSource>
+                <ui:SettingsExpanderItem Content="5h credit limit">
+                    <ui:SettingsExpanderItem.Footer>
+                        <TextBox Text="{Binding Settings.FiveHourCreditLimit}"
+                                 Watermark="auto" Width="90" Height="30" FontSize="12" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="7d credit limit">
+                    <ui:SettingsExpanderItem.Footer>
+                        <TextBox Text="{Binding Settings.SevenDayCreditLimit}"
+                                 Watermark="auto" Width="90" Height="30" FontSize="12" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="Billing cycle day">
+                    <ui:SettingsExpanderItem.Footer>
+                        <ComboBox ItemsSource="{Binding Settings.BillingCycleDayOptions}"
+                                  SelectedItem="{Binding Settings.SelectedBillingCycleDay}"
+                                  Width="90" Height="30" FontSize="12" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+            </ui:SettingsExpander>
+
+            <!-- Startup -->
+            <ui:SettingsExpander Header="Launch at login"
+                                IsClickEnabled="False">
+                <ui:SettingsExpander.IconSource>
+                    <ui:SymbolIconSource Symbol="Play" />
+                </ui:SettingsExpander.IconSource>
+                <ui:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.LaunchAtLogin}"
+                                  OnContent="" OffContent="" />
+                </ui:SettingsExpander.Footer>
+            </ui:SettingsExpander>
+
+            <!-- Database Management -->
+            <ui:SettingsExpander Header="Database">
+                <ui:SettingsExpander.IconSource>
+                    <ui:SymbolIconSource Symbol="Save" />
+                </ui:SettingsExpander.IconSource>
+                <ui:SettingsExpander.Footer>
+                    <TextBlock Text="{Binding Settings.DatabaseSize}" FontSize="11" Foreground="#6B7A8D"
+                               VerticalAlignment="Center" />
+                </ui:SettingsExpander.Footer>
+                <ui:SettingsExpanderItem Content="Clear all data">
+                    <ui:SettingsExpanderItem.Footer>
+                        <Button Content="Clear" Command="{Binding Settings.ClearDatabaseCommand}"
+                                FontSize="12" Padding="10,4" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="Export data (CSV)">
+                    <ui:SettingsExpanderItem.Footer>
+                        <Button Content="Export" Command="{Binding Settings.ExportDatabaseCommand}"
+                                FontSize="12" Padding="10,4" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="Prune old data">
+                    <ui:SettingsExpanderItem.Footer>
+                        <Button Content="Prune" Command="{Binding Settings.PruneDatabaseCommand}"
+                                FontSize="12" Padding="10,4" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+            </ui:SettingsExpander>
+
+            <!-- Account section -->
+            <Border Background="#0AFFFFFF" CornerRadius="4" Padding="12,10" Margin="4,6,0,0">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Accounts" FontSize="13" FontWeight="SemiBold" Foreground="#F5F7FB" />
+
+                    <!-- Account list -->
+                    <ItemsControl ItemsSource="{Binding Settings.Accounts}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:AccountItemViewModel">
+                                <Border Background="#0AFFFFFF" CornerRadius="4" Padding="10,6" Margin="0,2">
+                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" MinHeight="32">
+                                        <!-- Active indicator -->
+                                        <Ellipse Width="8" Height="8"
+                                                 VerticalAlignment="Center" Margin="0,0,10,0"
+                                                 Fill="{Binding IsActive, Converter={x:Static vm:AccountActiveColorConverter.Instance}}" />
+                                        <!-- Name (editable) + tier -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBox Text="{Binding DisplayName, Mode=TwoWay}"
+                                                     FontSize="12" Foreground="#F5F7FB"
+                                                     Background="Transparent" BorderThickness="0"
+                                                     Padding="0" MinHeight="0"
+                                                     Watermark="Account name" />
+                                            <TextBlock Text="{Binding TierLabel}" FontSize="10" Foreground="#6B7A8D"
+                                                       Margin="0,-2,0,0" />
+                                        </StackPanel>
+                                        <!-- Switch button (hidden if active) -->
+                                        <Button Grid.Column="2" Content="Switch"
+                                                FontSize="11" Padding="8,3" CornerRadius="3"
+                                                Background="#1A3050" Foreground="#4A90D9"
+                                                BorderThickness="0"
+                                                IsVisible="{Binding !IsActive}"
+                                                Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Settings.SwitchAccountCommand}"
+                                                CommandParameter="{Binding AccountId}"
+                                                VerticalAlignment="Center" Margin="4,0" />
+                                        <!-- Remove button -->
+                                        <Button Grid.Column="3"
+                                                FontSize="10" Padding="4,2"
+                                                Background="Transparent" Foreground="#6B7A8D"
+                                                BorderThickness="0"
+                                                Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Settings.RemoveAccountCommand}"
+                                                CommandParameter="{Binding AccountId}"
+                                                VerticalAlignment="Center">
+                                            <TextBlock Text="&#x2715;" FontSize="10" />
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Add account button -->
+                    <Button Content="+ Add Account"
+                            Command="{Binding SignInCommand}"
+                            Background="Transparent" Foreground="#4A90D9"
+                            FontSize="12" Padding="0,4"
+                            HorizontalAlignment="Left" BorderThickness="0" />
+                </StackPanel>
+            </Border>
+
+            <!-- Quit -->
+            <Border Margin="4,4,0,0" Padding="12,6">
+                <Button Content="Quit CC-Stats"
+                        Command="{Binding QuitCommand}"
+                        Background="Transparent" Foreground="#F0645B"
+                        FontSize="13" Padding="0"
+                        HorizontalAlignment="Left" BorderThickness="0" />
+            </Border>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

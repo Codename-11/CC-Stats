@@ -1,0 +1,436 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:CCStats.Desktop.ViewModels"
+        xmlns:controls="clr-namespace:CCStats.Desktop.Controls"
+        xmlns:views="clr-namespace:CCStats.Desktop.Views"
+        xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        d:DesignWidth="320" d:DesignHeight="400"
+        x:Class="CCStats.Desktop.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="CC-Stats (Windows)"
+        Width="320"
+        SizeToContent="Height"
+        MaxHeight="700"
+        WindowStartupLocation="Manual"
+        SystemDecorations="None"
+        Background="Transparent"
+        CanResize="False"
+        ShowInTaskbar="False"
+        ExtendClientAreaToDecorationsHint="True"
+        Topmost="{Binding IsTopmost}">
+
+    <Design.DataContext>
+        <vm:MainWindowViewModel />
+    </Design.DataContext>
+
+    <Border Background="#10141B" CornerRadius="12"
+            BorderBrush="#202A38" BorderThickness="1">
+
+        <StackPanel>
+            <!-- ═══ Title bar (drag handle + dock toggle) ═══ -->
+            <Border Name="DragRegion"
+                    Background="Transparent" Height="24"
+                    CornerRadius="12,12,0,0">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                    <Border Width="8" />
+                    <Border Grid.Column="1" Background="#3A4556"
+                            Width="32" Height="4" CornerRadius="2"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            IsVisible="{Binding !IsDocked}" />
+                    <Button Grid.Column="2" Classes="gear"
+                            Command="{Binding ToggleTopmostCommand}"
+                            ToolTip.Tip="{Binding TopmostTooltip}"
+                            Margin="0,0,2,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding TopmostIcon}" FontSize="11" Foreground="#6B7A8D" />
+                    </Button>
+                    <Button Grid.Column="3" Classes="gear"
+                            Command="{Binding ToggleDockCommand}"
+                            ToolTip.Tip="{Binding DockTooltip}"
+                            Margin="0,0,2,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding DockIcon}" FontSize="12" Foreground="#6B7A8D" />
+                    </Button>
+                    <Button Grid.Column="4" Classes="gear"
+                            Name="MinimizeButton"
+                            ToolTip.Tip="Minimize to tray"
+                            Margin="0,0,6,0" VerticalAlignment="Center">
+                        <TextBlock Text="&#x2715;" FontSize="11" Foreground="#6B7A8D" />
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- ═══ Authenticated content (only when signed in + not in settings) ═══ -->
+            <StackPanel Spacing="0" IsVisible="{Binding ShowAuthenticatedContent}">
+
+                <!-- 5h gauge section -->
+                <Border Classes="hoverable" Padding="10,8">
+                    <Border.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Copy Status" Command="{Binding CopyStatusCommand}" />
+                        </ContextMenu>
+                    </Border.ContextMenu>
+                    <StackPanel Spacing="2" HorizontalAlignment="Center">
+                        <!-- Header: label + used badge + trend badge -->
+                        <StackPanel Orientation="Horizontal" Spacing="6"
+                                    HorizontalAlignment="Center" Margin="0,0,0,4">
+                            <TextBlock Text="5h" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="#8FA0B8" VerticalAlignment="Center" />
+                            <Border Background="#0FFFFFFF" CornerRadius="4" Padding="5,2">
+                                <TextBlock Text="{Binding FiveHourUsedText}"
+                                           FontSize="10" Foreground="#F5F7FB" />
+                            </Border>
+                            <Border CornerRadius="4" Padding="5,2">
+                                <Border.Background>
+                                    <SolidColorBrush Color="{Binding FiveHourSlopeColor}" Opacity="0.15" />
+                                </Border.Background>
+                                <TextBlock Text="{Binding FiveHourTrendText}" FontSize="10">
+                                    <TextBlock.Foreground>
+                                        <SolidColorBrush Color="{Binding FiveHourSlopeColor}" />
+                                    </TextBlock.Foreground>
+                                </TextBlock>
+                            </Border>
+                        </StackPanel>
+                        <controls:HeadroomRingGauge
+                            Diameter="96" StrokeWidth="7"
+                            Percentage="{Binding FiveHourPercentage}"
+                            FillColor="{Binding FiveHourFillColor}"
+                            SlopeArrow=""
+                            HorizontalAlignment="Center" />
+                        <controls:CountdownLabel
+                            TargetTime="{Binding FiveHourResetTime}"
+                            PrimaryColor="{Binding FiveHourFillColor}"
+                            IsExhausted="{Binding FiveHourIsExhausted}"
+                            HorizontalAlignment="Center" />
+                        <!-- Budget estimate (only when slope is rising) -->
+                        <Border IsVisible="{Binding ShowBudgetEstimate}"
+                                Background="#15F39A4B" CornerRadius="4"
+                                Padding="6,2" HorizontalAlignment="Center" Margin="0,2,0,0">
+                            <TextBlock Text="{Binding FiveHourBudgetText}"
+                                       FontSize="10" Foreground="#F39A4B" />
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="divider" Margin="12,0" />
+
+                <!-- 7d gauge section (conditional) -->
+                <Border Classes="hoverable" IsVisible="{Binding ShowSevenDay}" Padding="10,6">
+                    <StackPanel Spacing="2" HorizontalAlignment="Center">
+                        <!-- Header: label + used badge + trend badge -->
+                        <StackPanel Orientation="Horizontal" Spacing="6"
+                                    HorizontalAlignment="Center" Margin="0,0,0,3">
+                            <TextBlock Text="7d" FontSize="11" FontWeight="SemiBold"
+                                       Foreground="#8FA0B8" VerticalAlignment="Center" />
+                            <Border Background="#0FFFFFFF" CornerRadius="4" Padding="5,2">
+                                <TextBlock Text="{Binding SevenDayUsedText}"
+                                           FontSize="10" Foreground="#F5F7FB" />
+                            </Border>
+                            <Border CornerRadius="4" Padding="5,2">
+                                <Border.Background>
+                                    <SolidColorBrush Color="{Binding SevenDaySlopeColor}" Opacity="0.15" />
+                                </Border.Background>
+                                <TextBlock Text="{Binding SevenDayTrendText}" FontSize="10">
+                                    <TextBlock.Foreground>
+                                        <SolidColorBrush Color="{Binding SevenDaySlopeColor}" />
+                                    </TextBlock.Foreground>
+                                </TextBlock>
+                            </Border>
+                        </StackPanel>
+                        <controls:HeadroomRingGauge
+                            Diameter="56" StrokeWidth="4"
+                            Percentage="{Binding SevenDayPercentage}"
+                            FillColor="{Binding SevenDayFillColor}"
+                            SlopeArrow=""
+                            ShowPercentageText="True"
+                            HorizontalAlignment="Center" />
+                        <controls:CountdownLabel
+                            TargetTime="{Binding SevenDayResetTime}"
+                            PrimaryColor="{Binding SevenDayFillColor}"
+                            IsExhausted="{Binding SevenDayIsExhausted}"
+                            HorizontalAlignment="Center" />
+                        <TextBlock IsVisible="{Binding ShowSevenDayQuotas}"
+                                   Text="{Binding SevenDayQuotasRemaining}"
+                                   FontSize="10" HorizontalAlignment="Center">
+                            <TextBlock.Foreground>
+                                <SolidColorBrush Color="{Binding SevenDayQuotasColor}" />
+                            </TextBlock.Foreground>
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="divider" IsVisible="{Binding ShowSevenDay}" Margin="12,0" />
+
+                <!-- Extra usage card (conditional) -->
+                <Border IsVisible="{Binding ShowExtraUsage}"
+                        Background="#801A1E26" CornerRadius="6" Padding="8" Margin="12,8">
+                    <StackPanel Spacing="4">
+                        <controls:ExtraUsageBar
+                            Utilization="{Binding ExtraUsageUtilization}"
+                            BarHeight="6" BarCornerRadius="3"
+                            HorizontalAlignment="Stretch" />
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock FontSize="12" FontWeight="SemiBold" Foreground="#F5F7FB"
+                                       Text="{Binding ExtraUsageText}" />
+                            <TextBlock Grid.Column="1" FontSize="12" Foreground="#8FA0B8"
+                                       Text="{Binding ExtraUsagePercentText}" />
+                        </Grid>
+                        <TextBlock Classes="caption2" Text="{Binding ExtraUsageResetText}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="divider" IsVisible="{Binding ShowExtraUsage}" Margin="12,0" />
+
+                <!-- Sparkline compact (click to expand) -->
+                <Border Name="SparklineBorder"
+                        IsVisible="{Binding ShowSparklineOnly}"
+                        Background="#141922" CornerRadius="6"
+                        BorderBrush="#202A38" BorderThickness="1"
+                        Padding="6,4" Cursor="Hand" Margin="12,4"
+                        Height="56">
+                    <Panel>
+                        <lvc:CartesianChart
+                            IsVisible="{Binding HasSparklineData}"
+                            Series="{Binding SparklineSeries}"
+                            Sections="{Binding SparklineSections}"
+                            XAxes="{Binding SparklineXAxes}"
+                            YAxes="{Binding SparklineYAxes}"
+                            TooltipPosition="Hidden"
+                            ZoomMode="None" />
+                        <TextBlock IsVisible="{Binding !HasSparklineData}"
+                                   Text="Building history..."
+                                   Classes="caption" FontStyle="Italic"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center" />
+                        <!-- Subtle label overlay -->
+                        <TextBlock Text="24h ▸" FontSize="9" Foreground="#3A4556"
+                                   HorizontalAlignment="Right" VerticalAlignment="Top"
+                                   Margin="0,2,4,0" />
+                    </Panel>
+                </Border>
+
+                <!-- Inline analytics (expanded) -->
+                <StackPanel IsVisible="{Binding ShowInlineAnalytics}" Margin="8,4">
+                    <!-- Time range + controls -->
+                    <Grid ColumnDefinitions="*,Auto,Auto" Margin="4,0,4,6">
+                        <StackPanel Orientation="Horizontal" Spacing="3">
+                            <Button Content="24h" FontSize="10" Padding="6,2" CornerRadius="3"
+                                    Background="{Binding Analytics.Tab24hBg}"
+                                    Foreground="{Binding Analytics.Tab24hFg}"
+                                    Command="{Binding Analytics.SelectTimeRangeCommand}"
+                                    CommandParameter="24h" />
+                            <Button Content="7d" FontSize="10" Padding="6,2" CornerRadius="3"
+                                    Background="{Binding Analytics.Tab7dBg}"
+                                    Foreground="{Binding Analytics.Tab7dFg}"
+                                    Command="{Binding Analytics.SelectTimeRangeCommand}"
+                                    CommandParameter="7d" />
+                            <Button Content="30d" FontSize="10" Padding="6,2" CornerRadius="3"
+                                    Background="{Binding Analytics.Tab30dBg}"
+                                    Foreground="{Binding Analytics.Tab30dFg}"
+                                    Command="{Binding Analytics.SelectTimeRangeCommand}"
+                                    CommandParameter="30d" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Classes="gear"
+                                Command="{Binding PopOutAnalyticsCommand}"
+                                ToolTip.Tip="Pop out to window" Margin="0,0,2,0">
+                            <TextBlock Text="&#x2197;" FontSize="12" Foreground="#6B7A8D" />
+                        </Button>
+                        <Button Grid.Column="2" Classes="gear"
+                                Command="{Binding ToggleInlineAnalyticsCommand}"
+                                ToolTip.Tip="Collapse">
+                            <TextBlock Text="&#x25BE;" FontSize="12" Foreground="#6B7A8D" />
+                        </Button>
+                    </Grid>
+
+                    <!-- Chart -->
+                    <Border Background="#141922" CornerRadius="6"
+                            BorderBrush="#202A38" BorderThickness="1"
+                            Padding="4" Height="150">
+                        <lvc:CartesianChart
+                            IsVisible="{Binding Analytics.HasData}"
+                            Series="{Binding Analytics.AnalyticsSeries}"
+                            Sections="{Binding Analytics.ChartSections}"
+                            XAxes="{Binding Analytics.AnalyticsXAxes}"
+                            YAxes="{Binding Analytics.AnalyticsYAxes}"
+                            TooltipPosition="Top"
+                            ZoomMode="X" />
+                    </Border>
+
+                    <!-- Insights -->
+                    <StackPanel IsVisible="{Binding Analytics.HasInsights}" Margin="4,4,4,0" Spacing="1">
+                        <TextBlock Text="{Binding Analytics.PrimaryInsight}" FontSize="11" Foreground="#F5F7FB" />
+                        <TextBlock Text="{Binding Analytics.SecondaryInsight}" FontSize="10" Foreground="#6B7A8D"
+                                   IsVisible="{Binding Analytics.SecondaryInsight, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </StackPanel>
+
+                    <!-- Breakdown bar -->
+                    <Border IsVisible="{Binding Analytics.ShowBreakdown}"
+                            Background="#0AFFFFFF" CornerRadius="4"
+                            Padding="8,4" Margin="0,4,0,0">
+                        <StackPanel Spacing="2">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="{Binding Analytics.BreakdownUsedText}" FontSize="11" FontWeight="SemiBold" Foreground="#F5F7FB" />
+                                <TextBlock Text="{Binding Analytics.BreakdownTotalText}" FontSize="11" Foreground="#6B7A8D" />
+                            </StackPanel>
+                            <ProgressBar Value="{Binding Analytics.BreakdownUsedPercent}" Maximum="100"
+                                         Height="6" CornerRadius="3"
+                                         Foreground="{Binding Analytics.BreakdownBarBrush}" Background="#15FFFFFF" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Status message (conditional) -->
+
+                <!-- Footer divider -->
+                <Border Classes="divider" Margin="12,0" />
+
+                <!-- Footer: account | freshness | gear -->
+                <Grid ColumnDefinitions="Auto,*,Auto"
+                      Margin="12,6,12,8">
+                    <!-- Account label — shows flyout with account list on hover/click when multi-account -->
+                    <Button Background="Transparent" BorderThickness="0" Padding="0"
+                            VerticalAlignment="Center" Cursor="Hand">
+                        <Button.Flyout>
+                            <Flyout Placement="Top" ShowMode="TransientWithDismissOnPointerMoveAway">
+                                <Border Background="#1A1E26" CornerRadius="8"
+                                        BorderBrush="#202A38" BorderThickness="1"
+                                        Padding="8" MinWidth="160">
+                                    <StackPanel Spacing="2">
+                                        <TextBlock Text="Switch Account" FontSize="11"
+                                                   FontWeight="SemiBold" Foreground="#8FA0B8"
+                                                   Margin="4,0,4,4" />
+                                        <ItemsControl ItemsSource="{Binding Settings.Accounts}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="vm:AccountItemViewModel">
+                                                    <Button Background="Transparent" BorderThickness="0"
+                                                            Padding="6,4" HorizontalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Left"
+                                                            Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Settings.SwitchAccountCommand}"
+                                                            CommandParameter="{Binding AccountId}">
+                                                        <Grid ColumnDefinitions="Auto,*">
+                                                            <Ellipse Width="6" Height="6"
+                                                                     VerticalAlignment="Center" Margin="0,0,8,0"
+                                                                     Fill="{Binding IsActive, Converter={x:Static vm:AccountActiveColorConverter.Instance}}" />
+                                                            <StackPanel Grid.Column="1">
+                                                                <TextBlock Text="{Binding DisplayName}"
+                                                                           FontSize="12" Foreground="#F5F7FB" />
+                                                                <TextBlock Text="{Binding TierLabel}"
+                                                                           FontSize="9" Foreground="#6B7A8D" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </Flyout>
+                        </Button.Flyout>
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{Binding ActiveAccountLabel}"
+                                       FontSize="11" Foreground="#6B7A8D"
+                                       VerticalAlignment="Center" />
+                            <TextBlock Text="▾" FontSize="8" Foreground="#4A5568"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding HasMultipleAccounts}" />
+                        </StackPanel>
+                    </Button>
+                    <TextBlock Grid.Column="1" FontSize="10"
+                               Foreground="{Binding FreshnessColor}"
+                               Text="{Binding FreshnessText}"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <Button Grid.Column="2" Classes="gear"
+                            Command="{Binding OpenSettingsCommand}"
+                            VerticalAlignment="Center" ToolTip.Tip="Settings">
+                        <TextBlock Text="&#x2699;" FontSize="16" Foreground="#8FA0B8" />
+                    </Button>
+                </Grid>
+            </StackPanel>
+
+            <!-- ═══ Unauthenticated view ═══ -->
+            <StackPanel IsVisible="{Binding ShowUnauthenticatedContent}"
+                        Spacing="14" HorizontalAlignment="Center"
+                        Margin="24,32,24,32">
+                <!-- App icon / branding -->
+                <TextBlock Text="CC-Stats" FontSize="20" FontWeight="Bold"
+                           Foreground="#F5F7FB" HorizontalAlignment="Center" />
+                <TextBlock Text="Claude Headroom Monitor"
+                           FontSize="12" Foreground="#6B7A8D"
+                           HorizontalAlignment="Center" Margin="0,-8,0,0" />
+
+                <Border Height="1" Background="#202A38" Margin="20,4" />
+
+                <TextBlock Text="Sign in to see your real-time Claude API usage, headroom gauges, and usage analytics."
+                           FontSize="13" Foreground="#8FA0B8"
+                           TextWrapping="Wrap" TextAlignment="Center"
+                           MaxWidth="270" LineHeight="19" />
+                <Button Content="Sign In with Anthropic"
+                        Command="{Binding SignInCommand}"
+                        Background="#4A90D9" Foreground="#F5F7FB"
+                        FontWeight="SemiBold" CornerRadius="6"
+                        Padding="20,10" HorizontalAlignment="Center"
+                        FontSize="14" />
+                <TextBlock Text="Opens your browser for one-click OAuth. No API keys needed."
+                           FontSize="11" Foreground="#6B7A8D"
+                           TextWrapping="Wrap" TextAlignment="Center"
+                           MaxWidth="270" />
+                <Button Classes="gear" Command="{Binding OpenSettingsCommand}"
+                        HorizontalAlignment="Center" ToolTip.Tip="Settings">
+                    <TextBlock Text="&#x2699;" FontSize="16" Foreground="#8FA0B8" />
+                </Button>
+            </StackPanel>
+
+            <!-- ═══ Authorizing view ═══ -->
+            <StackPanel IsVisible="{Binding ShowAuthorizingContent}"
+                        Spacing="12" HorizontalAlignment="Center"
+                        Margin="24,32,24,32">
+                <ProgressBar IsIndeterminate="True" Height="4"
+                             HorizontalAlignment="Stretch" Margin="20,0" />
+                <TextBlock Text="Waiting for browser auth..."
+                           FontSize="15" FontWeight="SemiBold" Foreground="#F5F7FB"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="Complete sign-in in your browser, then return here."
+                           FontSize="12" Foreground="#8FA0B8"
+                           TextWrapping="Wrap" TextAlignment="Center" MaxWidth="260" />
+                <Button Content="Cancel" Command="{Binding SignOutCommand}"
+                        Background="Transparent" Foreground="#6B7A8D"
+                        FontSize="12" Padding="8,4"
+                        HorizontalAlignment="Center" BorderThickness="0" />
+            </StackPanel>
+
+            <!-- ═══ Account naming (after OAuth) ═══ -->
+            <StackPanel IsVisible="{Binding ShowAccountNaming}"
+                        Spacing="12" HorizontalAlignment="Center"
+                        Margin="24,32,24,32">
+                <TextBlock Text="&#x2705;" FontSize="28" HorizontalAlignment="Center" />
+                <TextBlock Text="Signed in successfully!"
+                           FontSize="15" FontWeight="SemiBold" Foreground="#F5F7FB"
+                           HorizontalAlignment="Center" />
+                <TextBlock Text="Give this account a friendly name:"
+                           FontSize="12" Foreground="#8FA0B8"
+                           HorizontalAlignment="Center" />
+                <TextBox Text="{Binding NewAccountName, Mode=TwoWay}"
+                         Watermark="e.g. Work, Personal, Team"
+                         Width="220" Height="34" FontSize="13"
+                         HorizontalAlignment="Center"
+                         Background="#1A1E26" BorderBrush="#202A38"
+                         Foreground="#F5F7FB" />
+                <Button Content="Continue"
+                        Command="{Binding ConfirmAccountNameCommand}"
+                        Background="#4A90D9" Foreground="#F5F7FB"
+                        FontWeight="SemiBold" CornerRadius="6"
+                        Padding="20,8" HorizontalAlignment="Center"
+                        FontSize="13" />
+            </StackPanel>
+
+            <!-- ═══ Settings overlay ═══ -->
+            <ScrollViewer IsVisible="{Binding ShowSettings}"
+                          MaxHeight="600"
+                          HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <views:SettingsView DataContext="{Binding}" />
+            </ScrollViewer>
+        </StackPanel>
+    </Border>
+</Window>

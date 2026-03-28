@@ -1,0 +1,113 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sty="using:FluentAvalonia.Styling"
+             x:Class="CCStats.Desktop.App"
+             xmlns:local="using:CCStats.Desktop"
+             RequestedThemeVariant="Dark">
+
+    <Application.DataTemplates>
+        <local:ViewLocator/>
+    </Application.DataTemplates>
+
+    <Application.Styles>
+        <sty:FluentAvaloniaTheme PreferSystemTheme="False" />
+
+        <!-- Window background -->
+        <Style Selector="Window">
+            <Setter Property="Background" Value="#0F1115" />
+        </Style>
+
+        <!-- TextBlock style classes -->
+        <Style Selector="TextBlock.eyebrow">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#8FA0B8" />
+        </Style>
+        <Style Selector="TextBlock.caption">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="#8FA0B8" />
+        </Style>
+        <Style Selector="TextBlock.caption2">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="#6B7A8D" />
+        </Style>
+        <Style Selector="TextBlock.body">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Foreground" Value="#F5F7FB" />
+        </Style>
+        <Style Selector="TextBlock.title">
+            <Setter Property="FontSize" Value="17" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="#F5F7FB" />
+        </Style>
+        <Style Selector="TextBlock.small">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Foreground" Value="#6B7A8D" />
+        </Style>
+
+        <!-- Border style classes -->
+        <Style Selector="Border.card">
+            <Setter Property="Background" Value="#1A1E26" />
+            <Setter Property="BorderBrush" Value="#202A38" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="8" />
+        </Style>
+        <Style Selector="Border.divider">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Background" Value="#202A38" />
+        </Style>
+
+        <!-- Button style classes -->
+        <Style Selector="Button.gear">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#8FA0B8" />
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="Button.gear:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#F5F7FB" />
+        </Style>
+
+        <!-- Dark-themed global control styles -->
+        <Style Selector="ScrollViewer">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="ToggleSwitch">
+            <Setter Property="OnContent" Value="" />
+            <Setter Property="OffContent" Value="" />
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="Background" Value="#1A1E26" />
+            <Setter Property="BorderBrush" Value="#202A38" />
+            <Setter Property="Foreground" Value="#F5F7FB" />
+        </Style>
+        <Style Selector="NumericUpDown">
+            <Setter Property="Background" Value="#1A1E26" />
+            <Setter Property="BorderBrush" Value="#202A38" />
+            <Setter Property="Foreground" Value="#F5F7FB" />
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="Background" Value="#1A1E26" />
+            <Setter Property="BorderBrush" Value="#202A38" />
+            <Setter Property="Foreground" Value="#F5F7FB" />
+        </Style>
+        <Style Selector="ProgressBar">
+            <Setter Property="Background" Value="#253245" />
+            <Setter Property="Foreground" Value="#66B866" />
+            <Setter Property="CornerRadius" Value="3" />
+        </Style>
+
+        <!-- Hover section style -->
+        <Style Selector="Border.hoverable">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+        <Style Selector="Border.hoverable:pointerover">
+            <Setter Property="Background" Value="#141922" />
+        </Style>
+    </Application.Styles>
+</Application>
