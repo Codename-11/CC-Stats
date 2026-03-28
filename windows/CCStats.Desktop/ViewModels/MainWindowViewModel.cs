@@ -563,6 +563,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     // --- Update badge ---
 
+    private bool _updateConfirmPending;
+
     public bool ShowUpdateBadge
     {
         get => _showUpdateBadge;
@@ -579,6 +581,12 @@ public sealed class MainWindowViewModel : ViewModelBase
         {
             this.RaiseAndSetIfChanged(ref _updateVersionText, value);
         }
+    }
+
+    public bool UpdateConfirmPending
+    {
+        get => _updateConfirmPending;
+        set => this.RaiseAndSetIfChanged(ref _updateConfirmPending, value);
     }
 
     // --- Footer ---
