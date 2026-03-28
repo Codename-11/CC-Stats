@@ -14,12 +14,12 @@ Avalonia 11 + ReactiveUI + .NET 8 desktop app. Two projects in `windows/`:
 ### Key Patterns
 - **MVVM** via ReactiveUI — `MainWindowViewModel` is the primary VM
 - **AppState** is an immutable record — new state = `state with { ... }`
-- **App.axaml.cs** is the composition root — creates all 12 services, wires events
+- **App.axaml.cs** is the composition root — creates all 14 services, wires events
 - **Dual-mode VM** — preview states (F5 cycling) vs real services (`ConnectServices()`)
 - **SizeToContent** flyout — bottom-anchored via `BoundsProperty` subscription
 
 ### Services (CCStats.Core/Services/)
-`PreferencesManager` `SecureStorageService` `OAuthService` `TokenRefreshService` `APIClient` `PollingEngine` `SlopeCalculationService` `DatabaseManager` `HistoricalDataService` `NotificationService` `UpdateCheckService`
+`PreferencesManager` `SecureStorageService` `OAuthService` `TokenRefreshService` `APIClient` `PollingEngine` `SlopeCalculationService` `DatabaseManager` `HistoricalDataService` `NotificationService` `UpdateCheckService` `SessionDetectionService` `LocalCacheService`
 
 ### Custom Controls (CCStats.Desktop/Controls/)
 `HeadroomRingGauge` `CountdownLabel` `ExtraUsageBar` `GaugeIcon` `HeadroomColors` `SparklineControl` `TimeRangeSelector`
