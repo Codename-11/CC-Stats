@@ -350,25 +350,32 @@ public partial class App : Application
 
     private async Task CheckForUpdatesAsync()
     {
-        try
+        // Check on startup, then every 6 hours
+        while (true)
         {
-            var result = await _updateCheckService!.CheckForUpdateAsync();
-            if (result is not null)
+            try
             {
-                // Check if this version was dismissed
-                if (_preferences!.DismissedVersion == result.LatestVersion)
-                    return;
-
-                Dispatcher.UIThread.Post(() =>
+                var result = await _updateCheckService!.CheckForUpdateAsync();
+                if (result is not null)
                 {
-                    _viewModel!.ShowUpdateBadge = true;
-                    _viewModel.UpdateVersionText = result.LatestVersion;
-                });
+                    if (_preferences!.DismissedVersion != result.LatestVersion)
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            _viewModel!.ShowUpdateBadge = true;
+                            _viewModel.UpdateVersionText = result.LatestVersion;
+                        });
+                    }
+                }
             }
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[App] Update check failed: {ex.Message}");
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[App] Update check failed: {ex.Message}");
+            }
+
+            // Wait 6 hours before checking again
+            try { await Task.Delay(TimeSpan.FromHours(6)); }
+            catch (TaskCanceledException) { break; }
         }
     }
 
