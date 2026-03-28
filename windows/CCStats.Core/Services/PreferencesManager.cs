@@ -182,6 +182,24 @@ public sealed class PreferencesManager
         set { _data.DismissedTierRecommendation = value; }
     }
 
+    public bool PromoClockEnabled
+    {
+        get => _data.PromoClockEnabled;
+        set { _data.PromoClockEnabled = value; Save(); }
+    }
+
+    public string? PromoClockApiKey
+    {
+        get => _data.PromoClockApiKey;
+        set { _data.PromoClockApiKey = value; Save(); }
+    }
+
+    public string? PromoClockTeamId
+    {
+        get => _data.PromoClockTeamId;
+        set { _data.PromoClockTeamId = value; Save(); }
+    }
+
     public void Load()
     {
         if (!File.Exists(_filePath))
@@ -278,5 +296,8 @@ public sealed class PreferencesManager
         public bool ExtraUsageEnteredFired { get; set; }
         public List<string> DismissedPatternFindings { get; set; } = new();
         public string? DismissedTierRecommendation { get; set; }
+        public bool PromoClockEnabled { get; set; }
+        public string? PromoClockApiKey { get; set; }
+        public string? PromoClockTeamId { get; set; }
     }
 }

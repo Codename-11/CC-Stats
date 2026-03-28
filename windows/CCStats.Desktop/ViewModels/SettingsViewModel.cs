@@ -72,6 +72,9 @@ public sealed class SettingsViewModel : ViewModelBase
     private string _databaseSize = "Not available"; // TODO: Wire DatabaseManager.GetDatabaseSizeAsync() when available
     private bool _showClearDatabase;
     private bool _clearDatabaseConfirmPending;
+    private bool _promoClockEnabled;
+    private string _promoClockApiKey = "";
+    private string _promoClockTeamId = "";
 
     // --- Version ---
     public string VersionText
@@ -93,12 +96,18 @@ public sealed class SettingsViewModel : ViewModelBase
         SwitchAccountCommand = ReactiveCommand.Create<string>(OnSwitchAccount);
         RemoveAccountCommand = ReactiveCommand.Create<string>(OnRemoveAccount);
         ResetToDefaultsCommand = ReactiveCommand.Create(OnResetToDefaults);
+        OpenPromoClockCommand = ReactiveCommand.Create(() =>
+        {
+            Process.Start(new ProcessStartInfo("https://promoclock.co/en") { UseShellExecute = true });
+        });
     }
 
     // --- Multi-account ---
 
     public event EventHandler<string>? AccountSwitchRequested;
     public event EventHandler<string>? AccountRemoveRequested;
+    public event EventHandler? ExportRequested;
+    public event EventHandler? PruneRequested;
 
     public ObservableCollection<AccountItemViewModel> Accounts { get; } = new();
 
@@ -210,6 +219,27 @@ public sealed class SettingsViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _launchAtLogin, value);
     }
 
+    // PromoClock Integration
+    public bool PromoClockEnabled
+    {
+        get => _promoClockEnabled;
+        set => this.RaiseAndSetIfChanged(ref _promoClockEnabled, value);
+    }
+
+    public string PromoClockApiKey
+    {
+        get => _promoClockApiKey;
+        set => this.RaiseAndSetIfChanged(ref _promoClockApiKey, value);
+    }
+
+    public string PromoClockTeamId
+    {
+        get => _promoClockTeamId;
+        set => this.RaiseAndSetIfChanged(ref _promoClockTeamId, value);
+    }
+
+    public ReactiveCommand<Unit, Unit> OpenPromoClockCommand { get; }
+
     // Database
     public string DatabaseSize
     {
@@ -258,14 +288,12 @@ public sealed class SettingsViewModel : ViewModelBase
 
     private void OnExportDatabase()
     {
-        // TODO: Will be wired to actual export logic
-        // For now, no-op with the current size still displayed
+        ExportRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnPruneDatabase()
     {
-        // TODO: Will be wired to actual prune logic
-        // For now, no-op with the current size still displayed
+        PruneRequested?.Invoke(this, EventArgs.Empty);
     }
 
     private void OnSwitchAccount(string accountId)

@@ -114,6 +114,63 @@ public partial class App : Application
                 }
             };
 
+            // Wire DB export and prune
+            _viewModel.ExportDatabaseRequested += async (_, _) =>
+            {
+                try
+                {
+                    var from = DateTimeOffset.UtcNow.AddYears(-5);
+                    var to = DateTimeOffset.UtcNow;
+                    var polls = await _database!.QueryPollsAsync(from, to);
+
+                    var csv = new System.Text.StringBuilder();
+                    csv.AppendLine("Timestamp,FiveHourUtil,FiveHourResetsAt,SevenDayUtil,SevenDayResetsAt");
+                    foreach (var p in polls)
+                    {
+                        csv.AppendLine($"{p.Timestamp:o},{p.FiveHourUtilization},{p.FiveHourResetsAt:o},{p.SevenDayUtilization},{p.SevenDayResetsAt:o}");
+                    }
+
+                    var path = System.IO.Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                        $"ccstats-export-{DateTime.Now:yyyy-MM-dd}.csv");
+                    await System.IO.File.WriteAllTextAsync(path, csv.ToString());
+
+                    Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage($"Exported {polls.Count} polls to Desktop"));
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage($"Export failed: {ex.Message}"));
+                }
+            };
+
+            _viewModel.PruneDatabaseRequested += async (_, _) =>
+            {
+                try
+                {
+                    var days = _preferences!.DataRetentionDays;
+                    var pruned = await _database!.PruneOldDataAsync(days);
+
+                    // Refresh database size
+                    var size = await _database.GetDatabaseSizeAsync();
+                    var sizeText = size switch
+                    {
+                        < 1024 => $"{size} B",
+                        < 1024 * 1024 => $"{size / 1024.0:F1} KB",
+                        _ => $"{size / (1024.0 * 1024):F1} MB",
+                    };
+
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        _viewModel!.Settings!.DatabaseSize = sizeText;
+                        _viewModel.ShowToastMessage($"Pruned {pruned} old records (kept last {days} days)");
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage($"Prune failed: {ex.Message}"));
+                }
+            };
+
             // Set up system tray icon
             _trayIconService = TrayIconService.Setup(
                 this, _mainWindow,

@@ -57,6 +57,8 @@ public sealed class MainWindowViewModel : ViewModelBase
     public event EventHandler<string>? SwitchAccountRequested;
     public event EventHandler<bool>? InlineAnalyticsChanged;
     public event EventHandler? UpdateRequested;
+    public event EventHandler? ExportDatabaseRequested;
+    public event EventHandler? PruneDatabaseRequested;
 
     /// <summary>
     /// Shared AnalyticsViewModel used by both inline expanded view and popout window.
@@ -134,6 +136,10 @@ public sealed class MainWindowViewModel : ViewModelBase
             _secureStorage?.RemoveAccount(accountId);
             LoadAccounts();
         };
+
+        // Wire export/prune events
+        _settings.ExportRequested += (_, _) => ExportDatabaseRequested?.Invoke(this, EventArgs.Empty);
+        _settings.PruneRequested += (_, _) => PruneDatabaseRequested?.Invoke(this, EventArgs.Empty);
 
         // Wire database size (fire-and-forget)
         if (database is not null)
@@ -473,8 +479,8 @@ public sealed class MainWindowViewModel : ViewModelBase
         new StepLineSeries<double>
         {
             Values = _state.SparklineData,
-            Fill = new SolidColorPaint(SKColor.Parse("#4D66B866")),
-            Stroke = new SolidColorPaint(SKColor.Parse("#66B866")) { StrokeThickness = 1 },
+            Fill = new SolidColorPaint(SKColor.Parse("#8066B866")), // 50% green
+            Stroke = new SolidColorPaint(SKColor.Parse("#66B866")) { StrokeThickness = 1.5f },
             GeometrySize = 0,
             GeometryFill = null,
             GeometryStroke = null,
@@ -830,6 +836,11 @@ public sealed class MainWindowViewModel : ViewModelBase
         _settings.FiveHourCreditLimit = _preferences.CustomFiveHourCredits?.ToString() ?? string.Empty;
         _settings.SevenDayCreditLimit = _preferences.CustomSevenDayCredits?.ToString() ?? string.Empty;
         _settings.MonthlyPrice = _preferences.CustomMonthlyPrice?.ToString() ?? string.Empty;
+
+        // PromoClock
+        _settings.PromoClockEnabled = _preferences.PromoClockEnabled;
+        _settings.PromoClockApiKey = _preferences.PromoClockApiKey ?? string.Empty;
+        _settings.PromoClockTeamId = _preferences.PromoClockTeamId ?? string.Empty;
     }
 
     // --- Multi-account loading ---
@@ -984,6 +995,17 @@ public sealed class MainWindowViewModel : ViewModelBase
                     _preferences.CustomMonthlyPrice = double.TryParse(_settings.MonthlyPrice, out var mp)
                         ? mp
                         : null;
+                    break;
+                case nameof(SettingsViewModel.PromoClockEnabled):
+                    _preferences.PromoClockEnabled = _settings.PromoClockEnabled;
+                    break;
+                case nameof(SettingsViewModel.PromoClockApiKey):
+                    _preferences.PromoClockApiKey = string.IsNullOrWhiteSpace(_settings.PromoClockApiKey)
+                        ? null : _settings.PromoClockApiKey;
+                    break;
+                case nameof(SettingsViewModel.PromoClockTeamId):
+                    _preferences.PromoClockTeamId = string.IsNullOrWhiteSpace(_settings.PromoClockTeamId)
+                        ? null : _settings.PromoClockTeamId;
                     break;
             }
         };

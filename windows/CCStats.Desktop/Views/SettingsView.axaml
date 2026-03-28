@@ -186,6 +186,44 @@
                 </ui:SettingsExpanderItem>
             </ui:SettingsExpander>
 
+            <!-- PromoClock Integration -->
+            <ui:SettingsExpander Header="PromoClock"
+                                Description="Sync usage data with your team">
+                <ui:SettingsExpander.IconSource>
+                    <ui:SymbolIconSource Symbol="Globe" />
+                </ui:SettingsExpander.IconSource>
+                <ui:SettingsExpander.Footer>
+                    <ToggleSwitch IsChecked="{Binding Settings.PromoClockEnabled}"
+                                  OnContent="" OffContent="" />
+                </ui:SettingsExpander.Footer>
+                <ui:SettingsExpanderItem Content="API Key"
+                                         IsVisible="{Binding Settings.PromoClockEnabled}">
+                    <ui:SettingsExpanderItem.Footer>
+                        <TextBox Text="{Binding Settings.PromoClockApiKey}"
+                                 Watermark="Enter API key"
+                                 Width="140" Height="30" FontSize="11"
+                                 PasswordChar="&#x25CF;" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="Team ID"
+                                         IsVisible="{Binding Settings.PromoClockEnabled}">
+                    <ui:SettingsExpanderItem.Footer>
+                        <TextBox Text="{Binding Settings.PromoClockTeamId}"
+                                 Watermark="Optional"
+                                 Width="140" Height="30" FontSize="11" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="Learn more"
+                                         IsVisible="{Binding Settings.PromoClockEnabled}">
+                    <ui:SettingsExpanderItem.Footer>
+                        <Button Content="promoclock.co" FontSize="10" Padding="6,2"
+                                Background="Transparent" Foreground="#4A90D9"
+                                BorderThickness="0"
+                                Command="{Binding Settings.OpenPromoClockCommand}" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
+            </ui:SettingsExpander>
+
             <!-- Account section -->
             <Border Background="#0AFFFFFF" CornerRadius="4" Padding="12,10" Margin="0,6,0,0">
                 <StackPanel Spacing="6">

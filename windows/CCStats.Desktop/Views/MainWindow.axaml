@@ -198,8 +198,8 @@
                         IsVisible="{Binding ShowSparklineOnly}"
                         Background="#141922" CornerRadius="6"
                         BorderBrush="#202A38" BorderThickness="1"
-                        Padding="6,4" Cursor="Hand" Margin="12,4"
-                        Height="56">
+                        Padding="0" Cursor="Hand" Margin="12,4"
+                        Height="56" ClipToBounds="True">
                     <Panel>
                         <lvc:CartesianChart
                             IsVisible="{Binding HasSparklineData}"
@@ -208,7 +208,8 @@
                             XAxes="{Binding SparklineXAxes}"
                             YAxes="{Binding SparklineYAxes}"
                             TooltipPosition="Hidden"
-                            ZoomMode="None" />
+                            ZoomMode="None"
+                            Margin="-2" />
                         <TextBlock IsVisible="{Binding !HasSparklineData}"
                                    Text="Building history..."
                                    Classes="caption" FontStyle="Italic"
@@ -257,7 +258,7 @@
                     <!-- Chart -->
                     <Border Background="#141922" CornerRadius="6"
                             BorderBrush="#202A38" BorderThickness="1"
-                            Padding="4" Height="150">
+                            Padding="4" Height="180">
                         <Panel>
                             <lvc:CartesianChart
                                 IsVisible="{Binding Analytics.HasData}"
