@@ -302,6 +302,10 @@ public partial class App : Application
                     ? DateTimeOffset.TryParse(localCache.SevenDayResetsAt, out var r2) ? r2 : (DateTimeOffset?)null
                     : null;
 
+                // Seed sparkline with local cache value so chart appears immediately
+                _inMemorySparkline.Add(localCache.FiveHourUtilization.Value);
+                _inMemorySparkline.Add(localCache.FiveHourUtilization.Value); // duplicate to meet >= 2 threshold
+
                 _viewModel.ApplyState(new AppState
                 {
                     OAuthState = OAuthState.Authenticated,
@@ -316,6 +320,7 @@ public partial class App : Application
                     LastUpdated = localCache.FetchedAt,
                     ExtraUsageEnabled = localCache.ExtraUsageEnabled ?? false,
                     ExtraUsageUtilization = localCache.ExtraUsageUtilization,
+                    SparklineData = _inMemorySparkline.ToArray(),
                 });
                 _trayIconService?.UpdateIcon(
                     100 - localCache.FiveHourUtilization.Value,
@@ -410,7 +415,14 @@ public partial class App : Application
             if (sparklineData.Count < 2 && state.FiveHour is not null)
             {
                 _inMemorySparkline.Add(state.FiveHour.Utilization);
-                // Keep last 24 points max
+                while (_inMemorySparkline.Count > 24) _inMemorySparkline.RemoveAt(0);
+                sparklineData = _inMemorySparkline.ToArray();
+                Debug.WriteLine($"[App] Sparkline: DB={sparklineData.Count - 1} pts, in-memory={_inMemorySparkline.Count} pts");
+            }
+            // Also use in-memory if it has more data than DB (early startup)
+            else if (sparklineData.Count < _inMemorySparkline.Count && state.FiveHour is not null)
+            {
+                _inMemorySparkline.Add(state.FiveHour.Utilization);
                 while (_inMemorySparkline.Count > 24) _inMemorySparkline.RemoveAt(0);
                 sparklineData = _inMemorySparkline.ToArray();
             }

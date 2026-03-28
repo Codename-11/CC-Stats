@@ -620,9 +620,17 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     public bool HasMultipleAccounts => _settings?.Accounts.Count > 1;
 
-    public string FreshnessText => _state.LastUpdated is { } lastUpdated
-        ? $"Updated {DateTimeFormatting.RelativeTimeAgo(lastUpdated)}"
-        : "Waiting for first poll";
+    public string FreshnessText
+    {
+        get
+        {
+            if (_state.LastUpdated is not { } lastUpdated)
+                return "Tap to refresh";
+
+            var ago = DateTimeFormatting.RelativeTimeAgo(lastUpdated);
+            return $"{ago} · tap to refresh";
+        }
+    }
 
     public bool IsFreshnessStale
     {
