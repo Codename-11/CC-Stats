@@ -1,105 +1,108 @@
-# CC-Stats (Windows)
+<h1 align="center">CC-Stats (Windows)</h1>
 
-Windows system tray app for monitoring your Claude API headroom. Never get surprise-throttled mid-task.
+<p align="center">
+  Claude API headroom monitor for your Windows system tray.<br>
+  Never get surprise-throttled mid-task.
+</p>
 
-> **Windows port** of [rajish/cc-hdrm](https://github.com/rajish/cc-hdrm) (macOS). Built with Avalonia, .NET 8, and LiveCharts2.
+<p align="center">
+  <a href="https://github.com/Codename-11/CC-Stats/releases"><img src="https://img.shields.io/github/v/release/Codename-11/CC-Stats?include_prereleases&label=release" alt="Release"></a>
+  <a href="https://github.com/Codename-11/CC-Stats/actions/workflows/windows-ci.yml"><img src="https://github.com/Codename-11/CC-Stats/actions/workflows/windows-ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="MIT"></a>
+  <a href="https://dotnet.microsoft.com/download/dotnet/8.0"><img src="https://img.shields.io/badge/.NET-8.0-purple.svg" alt=".NET 8"></a>
+</p>
+
+<p align="center">
+  <a href="#installation">Install</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#development">Dev</a> ·
+  <a href="./TODO.md">Roadmap</a> ·
+  <a href="./CHANGELOG.md">Changelog</a>
+</p>
+
+---
+
+> **Windows port** of [rajish/cc-hdrm](https://github.com/rajish/cc-hdrm) (macOS SwiftUI). Built with Avalonia 11, .NET 8, ReactiveUI, and LiveCharts2.
 
 ## Features
 
-### At a Glance
-- **System tray headroom gauge** — always-visible with color-coded severity (green / yellow / orange / red) and burn rate arrows (→ ↗ ⬆)
-- **One-click sign-in** — OAuth via your browser, no API keys or config files
-- **Zero tokens spent** — reads quota data, not the chat API
-
-### Popover Detail
-- **Ring gauges** — 5-hour and 7-day headroom with animated fill and slope indicators
-- **Reset countdowns** — relative ("resets in 2h 13m") and absolute ("at 4:52 PM")
-- **Extra usage tracking** — dollar-based spend vs. limit with color-coded progress bar
-- **24-hour sparkline** — step-area chart; click to expand inline or pop out
-
-### Analytics
-- **Historical charts** — 24h, 7d, 30d, and All views with step-area and bar chart
-- **Subscription breakdown** — used vs. unused dollars prorated from your plan
-- **Pattern detection** — identifies overpaying, underpowering, usage decay, and suggests tier changes
-- **Cycle-over-cycle comparison** — utilization across billing periods
-- **Gap & outage visualization** — gray bands for polling gaps, red bands for API outages
-
-### Notifications
-- **Threshold alerts** — configurable warnings at customizable headroom levels
-- **Extra usage alerts** — notifications at 50%, 75%, 90% of extra usage
-- **Windows toast notifications** — native system notifications
-
-### Data & Settings
-- **Local SQLite storage** — every poll persisted, tiered rollups for efficient querying
-- **Configurable retention** — 30 days to 5 years
-- **Configurable poll interval** — 10 seconds to 30 minutes
-- **Multi-account support** — sign in with multiple Anthropic accounts
-- **Database management** — clear, export, and prune controls
+| Feature | Description |
+|---------|-------------|
+| **Ring Gauges** | 5-hour and 7-day headroom with animated fill, color-coded severity, and trend badges (→ Stable, ↗ Rising, ⬆ Rapid) |
+| **One-Click OAuth** | Sign in via your browser — no API keys, no config files |
+| **Zero Tokens Spent** | Reads quota data only, never the chat API |
+| **Inline Analytics** | Click sparkline to expand — time ranges (24h/7d/30d), insights, breakdown bar |
+| **Popout Charts** | Borderless analytics window with step-area and bar charts, zoom, gap/outage visualization |
+| **Pattern Detection** | Identifies overpaying, underpowering, usage decay, usage spikes — dismissible cards |
+| **Threshold Alerts** | Configurable warnings + Windows toast notifications, billing-period-aware |
+| **Extra Usage Tracking** | Dollar-based spend vs. limit, 4-tier color ramp, "entered extra usage" alerts |
+| **Multi-Account** | Sign in with multiple Anthropic accounts, hot-swap from tray or footer flyout |
+| **Adaptive Polling** | Auto-speeds to 15s when Claude Code is running, slows when idle |
+| **Projected Exhaustion** | Dashed forecast line showing when headroom hits 0% at current burn rate |
+| **Budget Calculator** | "~2h 15m of active coding left" estimate from slope + remaining headroom |
+| **Local Cache Fallback** | Reads Claude Code's statusline cache for instant data on startup |
+| **Dock to Taskbar** | Bottom-anchored, grows upward, always-on-top pin toggle |
+| **Quick Copy** | Right-click gauge → copy formatted status to clipboard |
 
 ## Installation
 
 ### From GitHub Releases
 
-Download the latest `CCStats-vX.Y.Z-win-x64.exe` from [Releases](../../releases) and run it.
+Download `CCStats-v0.1.0-win-x64.exe` from [Releases](../../releases) and run it.
 
-Self-contained single-file executable — no .NET SDK or runtime install needed.
+Self-contained single-file executable — no .NET SDK or runtime needed.
 
 ### From Source
 
 ```bash
-# Prerequisites: .NET 8 SDK
-git clone https://github.com/rajish/cc-hdrm.git
-cd cc-hdrm
+git clone https://github.com/Codename-11/CC-Stats.git
+cd CC-Stats
 dotnet run --project windows/CCStats.Desktop/CCStats.Desktop.csproj
 ```
 
-## Requirements
-
-- Windows 10 (build 17763) or later
-- An Anthropic account (Pro, Max 5x, or Max 20x)
+**Requirements:** Windows 10 (build 17763+), .NET 8 SDK (for source builds only).
 
 ## Development
 
 ```bash
-./run_dev.sh          # Bash — kills stale processes, Ctrl+C works
+./run_dev.sh          # Bash — auto-kills stale processes, Ctrl+C works
 .\run_dev.ps1         # PowerShell
 dotnet build windows/CCStats.Windows.sln
 ```
 
-Press **F5** in the app to cycle through preview states (Signed Out → Authorizing → Connected → Critical → Disconnected).
+Press **F5** in the app to cycle preview states (Signed Out → Authorizing → Connected → Critical → Disconnected).
 
 ### Tech Stack
 
 | Component | Technology |
 |-----------|-----------|
-| UI Framework | Avalonia 11.3 |
-| Theme | FluentAvalonia 2.2 (Windows 11 style) |
-| State | ReactiveUI + MVVM |
-| Charts | LiveCharts2 (SkiaSharp) |
-| Database | SQLite (Microsoft.Data.Sqlite) |
+| UI | [Avalonia 11.3](https://avaloniaui.net) + [FluentAvalonia 2.2](https://github.com/amwx/FluentAvalonia) |
+| State | [ReactiveUI](https://reactiveui.net) + MVVM |
+| Charts | [LiveCharts2](https://livecharts2.com) (SkiaSharp) |
+| Database | SQLite ([Microsoft.Data.Sqlite](https://learn.microsoft.com/en-us/dotnet/standard/data/sqlite/)) |
 | Credentials | DPAPI encryption |
-| Notifications | Microsoft.Toolkit.Uwp.Notifications |
-| Target | .NET 8 (net8.0-windows10.0.17763.0) |
+| Notifications | [Microsoft.Toolkit.Uwp.Notifications](https://learn.microsoft.com/en-us/windows/apps/design/shell/tiles-and-notifications/send-local-toast) |
+| Target | .NET 8 (`net8.0-windows10.0.17763.0`) |
 
 ### Project Structure
 
 ```
 windows/
-├── CCStats.Core/              # Platform-agnostic business logic
+├── CCStats.Core/              # Platform-agnostic: models, state, services
 │   ├── Models/                # AppState, HeadroomState, WindowState, etc.
 │   ├── State/                 # Immutable AppState record
-│   ├── Services/              # OAuth, Polling, API, DB, Preferences, etc.
-│   └── Formatting/            # Date/time formatting utilities
+│   ├── Services/              # OAuth, Polling, API, DB, Preferences (14 services)
+│   └── Formatting/            # Date/time formatting
 └── CCStats.Desktop/           # Avalonia desktop app
-    ├── Controls/              # Custom controls (ring gauge, sparkline, etc.)
-    ├── Services/              # Tray icon, toast notifications, launch-at-login
+    ├── Controls/              # Ring gauge, countdown, sparkline, etc.
+    ├── Services/              # Tray icon, toast, launch-at-login
     ├── ViewModels/            # MVVM ViewModels
     └── Views/                 # AXAML views
 ```
 
 ## Upstream
 
-This is a Windows port of [rajish/cc-hdrm](https://github.com/rajish/cc-hdrm), a macOS SwiftUI/AppKit menu bar app. The Windows version aims for feature parity using platform-native technologies.
+Windows port of [rajish/cc-hdrm](https://github.com/rajish/cc-hdrm) (macOS SwiftUI/AppKit menu bar app). Feature parity achieved with 6 additional Windows-exclusive features (multi-account, adaptive polling, projected exhaustion, budget calculator, local cache, click-to-refresh).
 
 ## License
 

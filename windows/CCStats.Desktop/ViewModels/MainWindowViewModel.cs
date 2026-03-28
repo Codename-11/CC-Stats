@@ -281,12 +281,16 @@ public sealed class MainWindowViewModel : ViewModelBase
             var util = _state.FiveHour?.Utilization ?? 0;
             var rate = _state.FiveHourSlopeRate;
 
-            if (rate <= 0 || util >= 100) return "";
+            // Only show when slope is meaningfully rising (not noise)
+            if (rate < 0.3 || util >= 100) return "";
 
             var remainingPercent = 100.0 - util;
             var minutesLeft = remainingPercent / rate;
 
-            if (minutesLeft > 1440) return ""; // more than 24h, not useful
+            // Sanity: if estimate > 5h (the window itself), it's not useful
+            if (minutesLeft > 300) return "";
+            // Minimum credible estimate: at least 5 minutes
+            if (minutesLeft < 5) return "< 5m of active use left";
             if (minutesLeft > 60)
             {
                 var hours = (int)(minutesLeft / 60);
@@ -297,7 +301,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         }
     }
 
-    public bool ShowBudgetEstimate => !string.IsNullOrEmpty(FiveHourBudgetText) && _state.FiveHourSlope.IsActionable();
+    public bool ShowBudgetEstimate => !string.IsNullOrEmpty(FiveHourBudgetText);
 
     public DateTimeOffset? FiveHourResetTime => _state.FiveHour?.ResetsAt;
 
