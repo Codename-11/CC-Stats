@@ -11,6 +11,7 @@ namespace CCStats.Core.Services;
 public sealed class SecureStorageService
 {
     private readonly string _filePath;
+    private readonly object _ioLock = new();
 
     public SecureStorageService()
         : this(GetDefaultFilePath())
@@ -24,43 +25,53 @@ public sealed class SecureStorageService
 
     public void SaveCredentials(StoredCredentials credentials)
     {
-        var directory = Path.GetDirectoryName(_filePath);
-        if (directory is not null)
+        lock (_ioLock)
         {
-            Directory.CreateDirectory(directory);
-        }
+            var directory = Path.GetDirectoryName(_filePath);
+            if (directory is not null)
+            {
+                Directory.CreateDirectory(directory);
+            }
 
-        var json = JsonSerializer.Serialize(credentials);
-        var plainBytes = Encoding.UTF8.GetBytes(json);
-        var encryptedBytes = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
-        File.WriteAllBytes(_filePath, encryptedBytes);
+            var json = JsonSerializer.Serialize(credentials);
+            var plainBytes = Encoding.UTF8.GetBytes(json);
+            var encryptedBytes = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
+            File.WriteAllBytes(_filePath, encryptedBytes);
+        }
     }
 
     public StoredCredentials? LoadCredentials()
     {
-        if (!File.Exists(_filePath))
+        lock (_ioLock)
         {
-            return null;
-        }
+            if (!File.Exists(_filePath))
+            {
+                return null;
+            }
 
-        try
-        {
-            var encryptedBytes = File.ReadAllBytes(_filePath);
-            var plainBytes = ProtectedData.Unprotect(encryptedBytes, null, DataProtectionScope.CurrentUser);
-            var json = Encoding.UTF8.GetString(plainBytes);
-            return JsonSerializer.Deserialize<StoredCredentials>(json);
-        }
-        catch
-        {
-            return null;
+            try
+            {
+                var encryptedBytes = File.ReadAllBytes(_filePath);
+                var plainBytes = ProtectedData.Unprotect(encryptedBytes, null, DataProtectionScope.CurrentUser);
+                var json = Encoding.UTF8.GetString(plainBytes);
+                return JsonSerializer.Deserialize<StoredCredentials>(json);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[SecureStorage] Failed to load credentials: {ex.Message}");
+                return null;
+            }
         }
     }
 
     public void ClearCredentials()
     {
-        if (File.Exists(_filePath))
+        lock (_ioLock)
         {
-            File.Delete(_filePath);
+            if (File.Exists(_filePath))
+            {
+                File.Delete(_filePath);
+            }
         }
     }
 
@@ -102,7 +113,11 @@ public sealed class SecureStorageService
             var json = Encoding.UTF8.GetString(plainBytes);
             return JsonSerializer.Deserialize<StoredCredentials>(json);
         }
-        catch { return null; }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[SecureStorage] Failed to load account credentials for {accountId}: {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>Removes a specific account's credentials.</summary>

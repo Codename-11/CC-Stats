@@ -36,6 +36,7 @@ public sealed class OAuthService : IDisposable
     public Task<string> StartAuthFlowAsync()
     {
         StopListening();
+        _timeoutCts?.Dispose();
 
         var (verifier, challenge) = GeneratePkce();
         _currentVerifier = verifier;
@@ -75,7 +76,13 @@ public sealed class OAuthService : IDisposable
     {
         try
         {
-            var context = await _listener!.GetContextAsync().WaitAsync(cancellationToken);
+            var listener = _listener;
+            if (listener is null)
+            {
+                AuthFailed?.Invoke(this, new AuthFailedEventArgs("Listener was disposed before callback"));
+                return;
+            }
+            var context = await listener.GetContextAsync().WaitAsync(cancellationToken);
             var request = context.Request;
             var query = request.QueryString;
 
@@ -165,9 +172,9 @@ public sealed class OAuthService : IDisposable
             _listener?.Stop();
             _listener?.Close();
         }
-        catch
+        catch (Exception ex)
         {
-            // Ignore cleanup errors
+            System.Diagnostics.Debug.WriteLine($"[OAuthService] Listener cleanup error: {ex.Message}");
         }
 
         _listener = null;

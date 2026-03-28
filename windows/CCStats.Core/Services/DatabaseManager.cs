@@ -6,6 +6,7 @@ namespace CCStats.Core.Services;
 public sealed class DatabaseManager : IAsyncDisposable
 {
     private readonly string _connectionString;
+    private readonly SemaphoreSlim _dbLock = new(1, 1);
     private SqliteConnection? _connection;
 
     public DatabaseManager()
@@ -79,75 +80,91 @@ public sealed class DatabaseManager : IAsyncDisposable
     public async Task<long> InsertPollAsync(UsagePoll poll)
     {
         EnsureConnected();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO usage_polls (timestamp, five_hour_utilization, five_hour_resets_at, seven_day_utilization, seven_day_resets_at)
+                VALUES (@timestamp, @fiveHour, @fiveHourResets, @sevenDay, @sevenDayResets);
+                SELECT last_insert_rowid();
+                """;
 
-        await using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO usage_polls (timestamp, five_hour_utilization, five_hour_resets_at, seven_day_utilization, seven_day_resets_at)
-            VALUES (@timestamp, @fiveHour, @fiveHourResets, @sevenDay, @sevenDayResets);
-            SELECT last_insert_rowid();
-            """;
+            cmd.Parameters.AddWithValue("@timestamp", poll.Timestamp.ToString("O"));
+            cmd.Parameters.AddWithValue("@fiveHour", poll.FiveHourUtilization);
+            cmd.Parameters.AddWithValue("@fiveHourResets", poll.FiveHourResetsAt?.ToString("O") ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@sevenDay", poll.SevenDayUtilization ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@sevenDayResets", poll.SevenDayResetsAt?.ToString("O") ?? (object)DBNull.Value);
 
-        cmd.Parameters.AddWithValue("@timestamp", poll.Timestamp.ToString("O"));
-        cmd.Parameters.AddWithValue("@fiveHour", poll.FiveHourUtilization);
-        cmd.Parameters.AddWithValue("@fiveHourResets", poll.FiveHourResetsAt?.ToString("O") ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@sevenDay", poll.SevenDayUtilization ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@sevenDayResets", poll.SevenDayResetsAt?.ToString("O") ?? (object)DBNull.Value);
-
-        var result = await cmd.ExecuteScalarAsync();
-        return Convert.ToInt64(result);
+            var result = await cmd.ExecuteScalarAsync();
+            return Convert.ToInt64(result);
+        }
+        finally { _dbLock.Release(); }
     }
 
     public async Task<IReadOnlyList<UsagePoll>> QueryPollsAsync(DateTimeOffset from, DateTimeOffset to)
     {
         EnsureConnected();
-
-        await using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = """
-            SELECT id, timestamp, five_hour_utilization, five_hour_resets_at, seven_day_utilization, seven_day_resets_at
-            FROM usage_polls
-            WHERE timestamp >= @from AND timestamp <= @to
-            ORDER BY timestamp ASC;
-            """;
-
-        cmd.Parameters.AddWithValue("@from", from.ToString("O"));
-        cmd.Parameters.AddWithValue("@to", to.ToString("O"));
-
-        var polls = new List<UsagePoll>();
-        await using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        await _dbLock.WaitAsync();
+        try
         {
-            polls.Add(ReadPollFromReader(reader));
-        }
+            await using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = """
+                SELECT id, timestamp, five_hour_utilization, five_hour_resets_at, seven_day_utilization, seven_day_resets_at
+                FROM usage_polls
+                WHERE timestamp >= @from AND timestamp <= @to
+                ORDER BY timestamp ASC;
+                """;
 
-        return polls;
+            cmd.Parameters.AddWithValue("@from", from.ToString("O"));
+            cmd.Parameters.AddWithValue("@to", to.ToString("O"));
+
+            var polls = new List<UsagePoll>();
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                polls.Add(ReadPollFromReader(reader));
+            }
+
+            return polls;
+        }
+        finally { _dbLock.Release(); }
     }
 
     public async Task<int> PruneOldDataAsync(int retentionDays)
     {
         EnsureConnected();
+        await _dbLock.WaitAsync();
+        try
+        {
+            var cutoff = DateTimeOffset.UtcNow.AddDays(-retentionDays).ToString("O");
 
-        var cutoff = DateTimeOffset.UtcNow.AddDays(-retentionDays).ToString("O");
+            await using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = """
+                DELETE FROM usage_polls WHERE timestamp < @cutoff;
+                DELETE FROM usage_rollups WHERE period_end < @cutoff;
+                DELETE FROM reset_events WHERE timestamp < @cutoff;
+                DELETE FROM outages WHERE started_at < @cutoff;
+                """;
+            cmd.Parameters.AddWithValue("@cutoff", cutoff);
 
-        await using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = """
-            DELETE FROM usage_polls WHERE timestamp < @cutoff;
-            DELETE FROM usage_rollups WHERE period_end < @cutoff;
-            DELETE FROM reset_events WHERE timestamp < @cutoff;
-            DELETE FROM outages WHERE started_at < @cutoff;
-            """;
-        cmd.Parameters.AddWithValue("@cutoff", cutoff);
-
-        return await cmd.ExecuteNonQueryAsync();
+            return await cmd.ExecuteNonQueryAsync();
+        }
+        finally { _dbLock.Release(); }
     }
 
     public async Task<long> GetDatabaseSizeAsync()
     {
         EnsureConnected();
-
-        await using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size();";
-        var result = await cmd.ExecuteScalarAsync();
-        return Convert.ToInt64(result);
+        await _dbLock.WaitAsync();
+        try
+        {
+            await using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "SELECT page_count * page_size FROM pragma_page_count(), pragma_page_size();";
+            var result = await cmd.ExecuteScalarAsync();
+            return Convert.ToInt64(result);
+        }
+        finally { _dbLock.Release(); }
     }
 
     public async Task InsertRollupAsync(
@@ -159,97 +176,120 @@ public sealed class DatabaseManager : IAsyncDisposable
         int sampleCount)
     {
         EnsureConnected();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO usage_rollups (period_start, period_end, resolution, avg_five_hour_utilization, max_five_hour_utilization, min_five_hour_utilization, avg_seven_day_utilization, max_seven_day_utilization, min_seven_day_utilization, sample_count)
+                VALUES (@periodStart, @periodEnd, @resolution, @avgFiveHour, @maxFiveHour, @minFiveHour, @avgSevenDay, @maxSevenDay, @minSevenDay, @sampleCount);
+                """;
 
-        await using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO usage_rollups (period_start, period_end, resolution, avg_five_hour_utilization, max_five_hour_utilization, min_five_hour_utilization, avg_seven_day_utilization, max_seven_day_utilization, min_seven_day_utilization, sample_count)
-            VALUES (@periodStart, @periodEnd, @resolution, @avgFiveHour, @maxFiveHour, @minFiveHour, @avgSevenDay, @maxSevenDay, @minSevenDay, @sampleCount);
-            """;
+            cmd.Parameters.AddWithValue("@periodStart", periodStart.ToString("O"));
+            cmd.Parameters.AddWithValue("@periodEnd", periodEnd.ToString("O"));
+            cmd.Parameters.AddWithValue("@resolution", resolution);
+            cmd.Parameters.AddWithValue("@avgFiveHour", avgFiveHour);
+            cmd.Parameters.AddWithValue("@maxFiveHour", maxFiveHour);
+            cmd.Parameters.AddWithValue("@minFiveHour", minFiveHour);
+            cmd.Parameters.AddWithValue("@avgSevenDay", avgSevenDay ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@maxSevenDay", maxSevenDay ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@minSevenDay", minSevenDay ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@sampleCount", sampleCount);
 
-        cmd.Parameters.AddWithValue("@periodStart", periodStart.ToString("O"));
-        cmd.Parameters.AddWithValue("@periodEnd", periodEnd.ToString("O"));
-        cmd.Parameters.AddWithValue("@resolution", resolution);
-        cmd.Parameters.AddWithValue("@avgFiveHour", avgFiveHour);
-        cmd.Parameters.AddWithValue("@maxFiveHour", maxFiveHour);
-        cmd.Parameters.AddWithValue("@minFiveHour", minFiveHour);
-        cmd.Parameters.AddWithValue("@avgSevenDay", avgSevenDay ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@maxSevenDay", maxSevenDay ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@minSevenDay", minSevenDay ?? (object)DBNull.Value);
-        cmd.Parameters.AddWithValue("@sampleCount", sampleCount);
-
-        await cmd.ExecuteNonQueryAsync();
+            await cmd.ExecuteNonQueryAsync();
+        }
+        finally { _dbLock.Release(); }
     }
 
     public async Task InsertResetEventAsync(DateTimeOffset timestamp, string windowType, double utilizationBefore, double utilizationAfter)
     {
         EnsureConnected();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO reset_events (timestamp, window_type, utilization_before, utilization_after)
+                VALUES (@timestamp, @windowType, @before, @after);
+                """;
 
-        await using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO reset_events (timestamp, window_type, utilization_before, utilization_after)
-            VALUES (@timestamp, @windowType, @before, @after);
-            """;
+            cmd.Parameters.AddWithValue("@timestamp", timestamp.ToString("O"));
+            cmd.Parameters.AddWithValue("@windowType", windowType);
+            cmd.Parameters.AddWithValue("@before", utilizationBefore);
+            cmd.Parameters.AddWithValue("@after", utilizationAfter);
 
-        cmd.Parameters.AddWithValue("@timestamp", timestamp.ToString("O"));
-        cmd.Parameters.AddWithValue("@windowType", windowType);
-        cmd.Parameters.AddWithValue("@before", utilizationBefore);
-        cmd.Parameters.AddWithValue("@after", utilizationAfter);
-
-        await cmd.ExecuteNonQueryAsync();
+            await cmd.ExecuteNonQueryAsync();
+        }
+        finally { _dbLock.Release(); }
     }
 
     /// <summary>Records the start of an outage.</summary>
     public async Task<long> StartOutageAsync(DateTimeOffset startedAt, string errorType)
     {
         EnsureConnected();
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "INSERT INTO outages (started_at, error_type) VALUES (@start, @error); SELECT last_insert_rowid();";
-        cmd.Parameters.AddWithValue("@start", startedAt.ToString("o"));
-        cmd.Parameters.AddWithValue("@error", errorType);
-        var result = await cmd.ExecuteScalarAsync();
-        return (long)(result ?? 0);
+        await _dbLock.WaitAsync();
+        try
+        {
+            await using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "INSERT INTO outages (started_at, error_type) VALUES (@start, @error); SELECT last_insert_rowid();";
+            cmd.Parameters.AddWithValue("@start", startedAt.ToString("O"));
+            cmd.Parameters.AddWithValue("@error", errorType);
+            var result = await cmd.ExecuteScalarAsync();
+            return (long)(result ?? 0);
+        }
+        finally { _dbLock.Release(); }
     }
 
     /// <summary>Closes an open outage by setting its end time and duration.</summary>
     public async Task CloseOutageAsync(DateTimeOffset endedAt)
     {
         EnsureConnected();
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = @"
-            UPDATE outages
-            SET ended_at = @end,
-                duration_seconds = (julianday(@end) - julianday(started_at)) * 86400.0
-            WHERE ended_at IS NULL";
-        cmd.Parameters.AddWithValue("@end", endedAt.ToString("o"));
-        await cmd.ExecuteNonQueryAsync();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = @"
+                UPDATE outages
+                SET ended_at = @end,
+                    duration_seconds = (julianday(@end) - julianday(started_at)) * 86400.0
+                WHERE ended_at IS NULL";
+            cmd.Parameters.AddWithValue("@end", endedAt.ToString("O"));
+            await cmd.ExecuteNonQueryAsync();
+        }
+        finally { _dbLock.Release(); }
     }
 
     /// <summary>Queries outages overlapping a time range.</summary>
     public async Task<IReadOnlyList<OutagePeriod>> QueryOutagesAsync(DateTimeOffset from, DateTimeOffset to)
     {
         EnsureConnected();
-        var results = new List<OutagePeriod>();
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = @"
-            SELECT id, started_at, ended_at, duration_seconds, error_type
-            FROM outages
-            WHERE started_at <= @to AND (ended_at >= @from OR ended_at IS NULL)
-            ORDER BY started_at ASC";
-        cmd.Parameters.AddWithValue("@from", from.ToString("o"));
-        cmd.Parameters.AddWithValue("@to", to.ToString("o"));
-        using var reader = await cmd.ExecuteReaderAsync();
-        while (await reader.ReadAsync())
+        await _dbLock.WaitAsync();
+        try
         {
-            results.Add(new OutagePeriod
+            var results = new List<OutagePeriod>();
+            await using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = @"
+                SELECT id, started_at, ended_at, duration_seconds, error_type
+                FROM outages
+                WHERE started_at <= @to AND (ended_at >= @from OR ended_at IS NULL)
+                ORDER BY started_at ASC";
+            cmd.Parameters.AddWithValue("@from", from.ToString("O"));
+            cmd.Parameters.AddWithValue("@to", to.ToString("O"));
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
             {
-                Id = reader.GetInt64(0),
-                StartedAt = DateTimeOffset.Parse(reader.GetString(1)),
-                EndedAt = reader.IsDBNull(2) ? null : DateTimeOffset.Parse(reader.GetString(2)),
-                DurationSeconds = reader.IsDBNull(3) ? null : reader.GetDouble(3),
-                ErrorType = reader.IsDBNull(4) ? null : reader.GetString(4),
-            });
+                results.Add(new OutagePeriod
+                {
+                    Id = reader.GetInt64(0),
+                    StartedAt = DateTimeOffset.Parse(reader.GetString(1)),
+                    EndedAt = reader.IsDBNull(2) ? null : DateTimeOffset.Parse(reader.GetString(2)),
+                    DurationSeconds = reader.IsDBNull(3) ? null : reader.GetDouble(3),
+                    ErrorType = reader.IsDBNull(4) ? null : reader.GetString(4),
+                });
+            }
+            return results;
         }
-        return results;
+        finally { _dbLock.Release(); }
     }
 
     public async ValueTask DisposeAsync()
@@ -259,6 +299,7 @@ public sealed class DatabaseManager : IAsyncDisposable
             await _connection.DisposeAsync();
             _connection = null;
         }
+        _dbLock.Dispose();
     }
 
     private void EnsureConnected()

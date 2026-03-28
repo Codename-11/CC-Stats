@@ -86,6 +86,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         PopOutAnalyticsCommand = ReactiveCommand.Create(OnPopOutAnalytics);
         ConfirmAccountNameCommand = ReactiveCommand.Create(ConfirmAccountName);
         CopyStatusCommand = ReactiveCommand.Create(OnCopyStatus);
+        RefreshCommand = ReactiveCommand.Create(OnRefresh);
     }
 
     // --- Service connection ---
@@ -236,7 +237,10 @@ public sealed class MainWindowViewModel : ViewModelBase
     {
         if (_pendingAccountCredentials is not null)
         {
-            var named = _pendingAccountCredentials with { DisplayName = NewAccountName };
+            var name = string.IsNullOrWhiteSpace(NewAccountName)
+                ? _state.SubscriptionTier ?? "My Account"
+                : NewAccountName.Trim();
+            var named = _pendingAccountCredentials with { DisplayName = name };
             SaveAndRefreshAccount(named);
             _pendingAccountCredentials = null;
         }
@@ -589,6 +593,16 @@ public sealed class MainWindowViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> PopOutAnalyticsCommand { get; }
     public ReactiveCommand<Unit, Unit> ConfirmAccountNameCommand { get; }
     public ReactiveCommand<Unit, Unit> CopyStatusCommand { get; }
+    public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+
+    // --- Refresh (force immediate poll) ---
+
+    public event EventHandler? RefreshRequested;
+
+    private void OnRefresh()
+    {
+        RefreshRequested?.Invoke(this, EventArgs.Empty);
+    }
 
     // --- Copy status to clipboard ---
 
@@ -750,15 +764,6 @@ public sealed class MainWindowViewModel : ViewModelBase
         _state = state;
         RaiseAllChanged();
         RefreshAnalytics();
-    }
-
-    /// <summary>
-    /// Applies state from the polling engine. Alias for ApplyState for semantic clarity.
-    /// Must be called on the UI thread.
-    /// </summary>
-    public void UpdateFromPollingState(AppState state)
-    {
-        ApplyState(state);
     }
 
     // --- Settings / Preferences Wiring ---

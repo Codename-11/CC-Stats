@@ -27,7 +27,7 @@ public static class LocalCacheService
             if (!File.Exists(CachePath)) return null;
 
             var json = File.ReadAllText(CachePath);
-            var doc = JsonDocument.Parse(json);
+            using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
             // Check freshness

@@ -32,7 +32,7 @@ public sealed class PollingEngine : IDisposable
         get { lock (_lock) return _currentState; }
     }
 
-    public bool IsRunning => _pollingTask is not null && !_pollingTask.IsCompleted;
+    public bool IsRunning { get { lock (_lock) return _pollingTask is not null && !_pollingTask.IsCompleted; } }
 
     public PollingEngine(
         APIClient apiClient,
@@ -55,16 +55,36 @@ public sealed class PollingEngine : IDisposable
     public void Start()
     {
         Stop();
-        _cts = new CancellationTokenSource();
-        _pollingTask = PollLoopAsync(_cts.Token);
+        var cts = new CancellationTokenSource();
+        var task = PollLoopAsync(cts.Token);
+        lock (_lock)
+        {
+            _cts = cts;
+            _pollingTask = task;
+        }
     }
 
     public void Stop()
     {
-        _cts?.Cancel();
-        _cts?.Dispose();
-        _cts = null;
-        _pollingTask = null;
+        CancellationTokenSource? cts;
+        Task? task;
+        lock (_lock)
+        {
+            cts = _cts;
+            task = _pollingTask;
+            _cts = null;
+            _pollingTask = null;
+        }
+
+        cts?.Cancel();
+
+        // Wait briefly for the polling task to finish before disposing the CTS
+        if (task is not null)
+        {
+            try { task.Wait(TimeSpan.FromSeconds(2)); } catch { /* expected OperationCanceled / AggregateException */ }
+        }
+
+        cts?.Dispose();
     }
 
     public async Task PollOnceAsync(CancellationToken cancellationToken = default)
@@ -89,9 +109,9 @@ public sealed class PollingEngine : IDisposable
             {
                 break;
             }
-            catch
+            catch (Exception ex)
             {
-                // Continue polling even if a cycle fails
+                System.Diagnostics.Debug.WriteLine($"[PollingEngine] Poll cycle failed: {ex.Message}");
             }
 
             try
@@ -175,7 +195,7 @@ public sealed class PollingEngine : IDisposable
                 _consecutiveFailures++;
                 if (_consecutiveFailures >= 2 && !_outageActive && _database is not null)
                 {
-                    try { await _database.StartOutageAsync(now, "EmptyResponse"); } catch { }
+                    try { await _database.StartOutageAsync(now, "EmptyResponse"); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[PollingEngine] Outage tracking error: {ex.Message}"); }
                     _outageActive = true;
                 }
                 PollFailed?.Invoke(this, new PollFailedEventArgs("Empty usage response"));
@@ -234,7 +254,7 @@ public sealed class PollingEngine : IDisposable
                         }
                     }
                 }
-                catch { /* Profile fetch is best-effort */ }
+                catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[PollingEngine] Profile fetch failed: {ex.Message}"); }
             }
 
             var creditLimits = tier.GetCreditLimits();
@@ -273,7 +293,7 @@ public sealed class PollingEngine : IDisposable
             // Clear outage tracking on success
             if (_outageActive && _database is not null)
             {
-                try { await _database.CloseOutageAsync(now); } catch { }
+                try { await _database.CloseOutageAsync(now); } catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"[PollingEngine] Outage close error: {ex.Message}"); }
                 _outageActive = false;
             }
             _consecutiveFailures = 0;
@@ -307,7 +327,7 @@ public sealed class PollingEngine : IDisposable
             _consecutiveFailures++;
             if (_consecutiveFailures >= 2 && !_outageActive && _database is not null)
             {
-                try { await _database.StartOutageAsync(now, ex.GetType().Name); } catch { }
+                try { await _database.StartOutageAsync(now, ex.GetType().Name); } catch (Exception dbEx) { System.Diagnostics.Debug.WriteLine($"[PollingEngine] Outage tracking error: {dbEx.Message}"); }
                 _outageActive = true;
             }
             PollFailed?.Invoke(this, new PollFailedEventArgs(ex.Message));

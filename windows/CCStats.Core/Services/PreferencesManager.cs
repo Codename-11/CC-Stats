@@ -154,8 +154,9 @@ public sealed class PreferencesManager
             _data = JsonSerializer.Deserialize<PreferencesData>(json, JsonOptions) ?? new PreferencesData();
             Validate();
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine($"[PreferencesManager] Failed to load preferences: {ex.Message}");
             _data = new PreferencesData();
         }
     }
@@ -174,9 +175,9 @@ public sealed class PreferencesManager
             File.WriteAllText(_filePath, json);
             PreferencesChanged?.Invoke(this, EventArgs.Empty);
         }
-        catch
+        catch (Exception ex)
         {
-            // Silently fail - preferences are not critical
+            System.Diagnostics.Debug.WriteLine($"[PreferencesManager] Failed to save preferences: {ex.Message}");
         }
     }
 

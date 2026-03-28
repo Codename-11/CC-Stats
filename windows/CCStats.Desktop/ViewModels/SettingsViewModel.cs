@@ -61,7 +61,6 @@ public sealed class SettingsViewModel : ViewModelBase
     private bool _extraUsageAlert50;
     private bool _extraUsageAlert75;
     private bool _extraUsageAlert90;
-    private bool _extraUsageAlertEntered;
     private string _selectedPollInterval = "30s";
     private string _selectedDataRetention = "90d";
     private string _fiveHourCreditLimit = string.Empty;
@@ -131,12 +130,6 @@ public sealed class SettingsViewModel : ViewModelBase
     {
         get => _extraUsageAlert90;
         set => this.RaiseAndSetIfChanged(ref _extraUsageAlert90, value);
-    }
-
-    public bool ExtraUsageAlertEntered
-    {
-        get => _extraUsageAlertEntered;
-        set => this.RaiseAndSetIfChanged(ref _extraUsageAlertEntered, value);
     }
 
     // Adaptive polling
@@ -224,13 +217,13 @@ public sealed class SettingsViewModel : ViewModelBase
     private void OnExportDatabase()
     {
         // TODO: Will be wired to actual export logic
-        DatabaseSize = "Export coming soon";
+        // For now, no-op with the current size still displayed
     }
 
     private void OnPruneDatabase()
     {
         // TODO: Will be wired to actual prune logic
-        DatabaseSize = "Pruning...";
+        // For now, no-op with the current size still displayed
     }
 
     private void OnSwitchAccount(string accountId)

@@ -9,8 +9,6 @@
              x:Class="CCStats.Desktop.Views.SettingsView"
              x:DataType="vm:MainWindowViewModel">
 
-    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                  VerticalScrollBarVisibility="Auto">
         <StackPanel Spacing="2" Margin="4,0,4,8">
 
             <!-- Header -->
@@ -181,7 +179,7 @@
             </ui:SettingsExpander>
 
             <!-- Account section -->
-            <Border Background="#0AFFFFFF" CornerRadius="4" Padding="12,10" Margin="4,6,0,0">
+            <Border Background="#0AFFFFFF" CornerRadius="4" Padding="12,10" Margin="0,6,0,0">
                 <StackPanel Spacing="6">
                     <TextBlock Text="Accounts" FontSize="13" FontWeight="SemiBold" Foreground="#F5F7FB" />
 
@@ -240,7 +238,7 @@
             </Border>
 
             <!-- Quit -->
-            <Border Margin="4,4,0,0" Padding="12,6">
+            <Border Margin="0,4,0,0" Padding="12,6">
                 <Button Content="Quit CC-Stats"
                         Command="{Binding QuitCommand}"
                         Background="Transparent" Foreground="#F0645B"
@@ -249,5 +247,4 @@
             </Border>
 
         </StackPanel>
-    </ScrollViewer>
 </UserControl>

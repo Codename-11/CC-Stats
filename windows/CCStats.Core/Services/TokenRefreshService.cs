@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace CCStats.Core.Services;
 
-public sealed class TokenRefreshService
+public sealed class TokenRefreshService : IDisposable
 {
     private const string TokenEndpoint = "https://console.anthropic.com/v1/oauth/token";
     /// Anthropic's public OAuth client ID (used by Claude Code and OpenCode)
@@ -11,15 +11,22 @@ public sealed class TokenRefreshService
     private static readonly TimeSpan ExpiryBuffer = TimeSpan.FromMinutes(5);
 
     private readonly HttpClient _httpClient;
+    private readonly bool _ownsHttpClient;
 
     public TokenRefreshService()
-        : this(new HttpClient())
+        : this(new HttpClient(), ownsClient: true)
     {
     }
 
-    public TokenRefreshService(HttpClient httpClient)
+    public TokenRefreshService(HttpClient httpClient, bool ownsClient = false)
     {
         _httpClient = httpClient;
+        _ownsHttpClient = ownsClient;
+    }
+
+    public void Dispose()
+    {
+        if (_ownsHttpClient) _httpClient.Dispose();
     }
 
     public static bool IsTokenExpired(DateTimeOffset? expiresAt)

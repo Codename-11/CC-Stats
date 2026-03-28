@@ -68,6 +68,8 @@
                 <Border Classes="hoverable" Padding="10,8">
                     <Border.ContextMenu>
                         <ContextMenu>
+                            <MenuItem Header="Refresh Now" Command="{Binding RefreshCommand}" />
+                            <Separator />
                             <MenuItem Header="Copy Status" Command="{Binding CopyStatusCommand}" />
                         </ContextMenu>
                     </Border.ContextMenu>
@@ -121,7 +123,7 @@
                         <!-- Header: label + used badge + trend badge -->
                         <StackPanel Orientation="Horizontal" Spacing="6"
                                     HorizontalAlignment="Center" Margin="0,0,0,3">
-                            <TextBlock Text="7d" FontSize="11" FontWeight="SemiBold"
+                            <TextBlock Text="7d" FontSize="12" FontWeight="SemiBold"
                                        Foreground="#8FA0B8" VerticalAlignment="Center" />
                             <Border Background="#0FFFFFFF" CornerRadius="4" Padding="5,2">
                                 <TextBlock Text="{Binding SevenDayUsedText}"
@@ -247,14 +249,22 @@
                     <Border Background="#141922" CornerRadius="6"
                             BorderBrush="#202A38" BorderThickness="1"
                             Padding="4" Height="150">
-                        <lvc:CartesianChart
-                            IsVisible="{Binding Analytics.HasData}"
-                            Series="{Binding Analytics.AnalyticsSeries}"
-                            Sections="{Binding Analytics.ChartSections}"
-                            XAxes="{Binding Analytics.AnalyticsXAxes}"
-                            YAxes="{Binding Analytics.AnalyticsYAxes}"
-                            TooltipPosition="Top"
-                            ZoomMode="X" />
+                        <Panel>
+                            <lvc:CartesianChart
+                                IsVisible="{Binding Analytics.HasData}"
+                                Series="{Binding Analytics.AnalyticsSeries}"
+                                Sections="{Binding Analytics.ChartSections}"
+                                XAxes="{Binding Analytics.AnalyticsXAxes}"
+                                YAxes="{Binding Analytics.AnalyticsYAxes}"
+                                TooltipPosition="Top"
+                                ZoomMode="X" />
+                            <TextBlock IsVisible="{Binding !Analytics.HasData}"
+                                       Text="Collecting data..."
+                                       FontSize="11" FontStyle="Italic"
+                                       Foreground="#6B7A8D"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center" />
+                        </Panel>
                     </Border>
 
                     <!-- Insights -->
@@ -281,6 +291,16 @@
                 </StackPanel>
 
                 <!-- Status message (conditional) -->
+                <Border IsVisible="{Binding ShowStatus}"
+                        Background="#15F0645B" CornerRadius="4"
+                        Padding="8,4" Margin="12,4">
+                    <StackPanel Spacing="1">
+                        <TextBlock Text="{Binding StatusTitle}"
+                                   FontSize="11" FontWeight="SemiBold" Foreground="#F0645B" />
+                        <TextBlock Text="{Binding StatusDetail}"
+                                   FontSize="10" Foreground="#8FA0B8" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
 
                 <!-- Footer divider -->
                 <Border Classes="divider" Margin="12,0" />
@@ -336,14 +356,25 @@
                                        IsVisible="{Binding HasMultipleAccounts}" />
                         </StackPanel>
                     </Button>
-                    <TextBlock Grid.Column="1" FontSize="10"
-                               Foreground="{Binding FreshnessColor}"
-                               Text="{Binding FreshnessText}"
-                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Command="{Binding RefreshCommand}"
+                            Background="Transparent" BorderThickness="0" Padding="0"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            Cursor="Hand" ToolTip.Tip="Click to refresh">
+                        <TextBlock FontSize="10"
+                                   Foreground="{Binding FreshnessColor}"
+                                   Text="{Binding FreshnessText}" />
+                    </Button>
                     <Button Grid.Column="2" Classes="gear"
                             Command="{Binding OpenSettingsCommand}"
-                            VerticalAlignment="Center" ToolTip.Tip="Settings">
-                        <TextBlock Text="&#x2699;" FontSize="16" Foreground="#8FA0B8" />
+                            VerticalAlignment="Center"
+                            ToolTip.Tip="{Binding UpdateVersionText, StringFormat='Update {0} available', FallbackValue=Settings}">
+                        <Panel>
+                            <TextBlock Text="&#x2699;" FontSize="16" Foreground="#8FA0B8" />
+                            <Ellipse Width="6" Height="6" Fill="#4A90D9"
+                                     HorizontalAlignment="Right" VerticalAlignment="Top"
+                                     Margin="0,-1,-1,0"
+                                     IsVisible="{Binding ShowUpdateBadge}" />
+                        </Panel>
                     </Button>
                 </Grid>
             </StackPanel>

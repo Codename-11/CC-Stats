@@ -40,6 +40,9 @@ public partial class App : Application
     private UpdateCheckService? _updateCheckService;
 
     private int _lastPollIntervalSeconds;
+    private readonly List<double> _inMemorySparkline = new();
+    private DateTimeOffset _lastAccountLoadTime = DateTimeOffset.MinValue;
+    private static readonly TimeSpan AccountLoadThrottle = TimeSpan.FromMinutes(5);
 
     public override void Initialize()
     {
@@ -67,6 +70,7 @@ public partial class App : Application
             _viewModel.OpenSettingsRequested += OnOpenSettingsRequested;
             _viewModel.QuitRequested += OnQuitRequested;
             _viewModel.SwitchAccountRequested += OnSwitchAccountRequested;
+            _viewModel.RefreshRequested += (_, _) => _ = ForceImmediatePollAsync();
 
             // Set up system tray icon
             _trayIconService = TrayIconService.Setup(
@@ -95,9 +99,16 @@ public partial class App : Application
         // 2. Secure storage
         _secureStorage = new SecureStorageService();
 
-        // 3. Database (fire-and-forget init)
+        // 3. Database — MUST complete before polling starts
         _database = new DatabaseManager();
-        _ = InitializeDatabaseAsync();
+        try
+        {
+            _database.InitializeAsync().GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[App] Database init failed: {ex.Message}");
+        }
 
         // 4. Historical data
         _historyService = new HistoricalDataService(_database);
@@ -196,18 +207,6 @@ public partial class App : Application
         _ = CheckForUpdatesAsync();
     }
 
-    private async Task InitializeDatabaseAsync()
-    {
-        try
-        {
-            await _database!.InitializeAsync();
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"[App] Database initialization failed: {ex.Message}");
-        }
-    }
-
     private async Task CheckForUpdatesAsync()
     {
         try
@@ -238,6 +237,8 @@ public partial class App : Application
     {
         _pollingEngine!.PollCompleted += async (_, e) =>
         {
+          try
+          {
             var state = _pollingEngine.CurrentState;
 
             // Record to database (fire-and-forget)
@@ -257,15 +258,29 @@ public partial class App : Application
                 Debug.WriteLine($"[App] Failed to record poll: {ex.Message}");
             }
 
-            // Get sparkline data
+            // Get sparkline data from DB, fall back to accumulating in-memory
             IReadOnlyList<double> sparklineData;
             try
             {
                 sparklineData = await _historyService!.GetSparklineDataAsync();
             }
-            catch
+            catch (Exception ex)
             {
-                sparklineData = state.SparklineData;
+                Debug.WriteLine($"[App] Failed to fetch sparkline data: {ex.Message}");
+                sparklineData = Array.Empty<double>();
+            }
+
+            // If DB has no history yet, build sparkline from accumulated polls
+            if (sparklineData.Count < 2 && state.FiveHour is not null)
+            {
+                _inMemorySparkline.Add(state.FiveHour.Utilization);
+                // Keep last 24 points max
+                while (_inMemorySparkline.Count > 24) _inMemorySparkline.RemoveAt(0);
+                sparklineData = _inMemorySparkline.ToArray();
+            }
+            else if (sparklineData.Count >= 2)
+            {
+                _inMemorySparkline.Clear(); // DB has real data, stop in-memory tracking
             }
 
             // Marshal state update to UI thread
@@ -283,9 +298,19 @@ public partial class App : Application
                     stateWithSparkline.MenuBarHeadroomState,
                     $"CC-Stats — {stateWithSparkline.MenuBarText}");
 
-                // Refresh account list so tier labels stay current
-                _viewModel.LoadAccounts();
+                // Refresh account list periodically so tier labels stay current
+                var now = DateTimeOffset.UtcNow;
+                if (now - _lastAccountLoadTime > AccountLoadThrottle)
+                {
+                    _lastAccountLoadTime = now;
+                    _viewModel.LoadAccounts();
+                }
             });
+          }
+          catch (Exception ex)
+          {
+              Debug.WriteLine($"[App] PollCompleted handler error: {ex.Message}");
+          }
         };
 
         _pollingEngine.PollFailed += (_, e) =>
@@ -479,17 +504,7 @@ public partial class App : Application
     private void PositionWindowNearTray()
     {
         if (_mainWindow is null) return;
-
-        // Position near bottom-right of screen (near system tray)
-        var screen = _mainWindow.Screens.Primary;
-        if (screen is null) return;
-
-        var workArea = screen.WorkingArea;
-        var scaling = screen.Scaling;
-        var windowWidth = (int)(_mainWindow.Width * scaling);
-        var x = (workArea.Right - windowWidth - (int)(8 * scaling)) / scaling;
-
-        _mainWindow.Position = new PixelPoint((int)x, workArea.Bottom - 600);
+        TrayIconService.PositionWindowNearTray(_mainWindow);
     }
 
     private void OnOpenAnalyticsRequested(object? sender, EventArgs e)
@@ -573,12 +588,14 @@ public partial class App : Application
         _pollingEngine?.Stop();
         _pollingEngine?.Dispose();
         _oauthService?.Dispose();
+        _tokenRefresh?.Dispose();
         _apiClient?.Dispose();
 
-        // Dispose database (fire-and-forget since we're shutting down)
+        // Dispose database — block briefly to ensure connection closes cleanly
         if (_database is not null)
         {
-            _ = _database.DisposeAsync();
+            try { _database.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(2)); }
+            catch (Exception ex) { Debug.WriteLine($"[App] Database dispose error: {ex.Message}"); }
         }
 
         // Save preferences

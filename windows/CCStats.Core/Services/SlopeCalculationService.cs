@@ -107,7 +107,7 @@ public sealed class SlopeCalculationService
             denominator += dx * dx;
         }
 
-        return denominator == 0 ? 0 : Math.Max(0, numerator / denominator);
+        return denominator == 0 ? 0 : numerator / denominator;
     }
 
     private void PruneOldSamples(DateTimeOffset now)

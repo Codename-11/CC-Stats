@@ -12,11 +12,12 @@ public static class SessionDetectionService
     {
         "claude",           // Claude Code CLI
         "claude-code",      // Claude Code alternative
-        "node",             // Could be Claude Code running via Node
     };
 
     /// <summary>
     /// Checks if any Claude-related processes are currently running.
+    /// Looks for exact process names first, then checks Node.js processes
+    /// for Claude-specific command-line arguments.
     /// </summary>
     public static bool IsClaudeActive()
     {
@@ -25,12 +26,36 @@ public static class SessionDetectionService
             foreach (var name in ClaudeProcessNames)
             {
                 var processes = Process.GetProcessesByName(name);
-                if (processes.Length > 0)
-                {
-                    foreach (var p in processes) p.Dispose();
-                    return true;
-                }
+                var found = processes.Length > 0;
                 foreach (var p in processes) p.Dispose();
+                if (found) return true;
+            }
+
+            // Check node processes for Claude Code specifically
+            var nodeProcesses = Process.GetProcessesByName("node");
+            try
+            {
+                foreach (var p in nodeProcesses)
+                {
+                    try
+                    {
+                        // Check if the node process main module path contains "claude"
+                        var mainModule = p.MainModule?.FileName;
+                        if (mainModule is not null &&
+                            mainModule.Contains("claude", StringComparison.OrdinalIgnoreCase))
+                        {
+                            return true;
+                        }
+                    }
+                    catch
+                    {
+                        // Access denied for some processes — skip
+                    }
+                }
+            }
+            finally
+            {
+                foreach (var p in nodeProcesses) p.Dispose();
             }
         }
         catch

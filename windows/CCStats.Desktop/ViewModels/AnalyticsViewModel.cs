@@ -44,6 +44,7 @@ public sealed class AnalyticsViewModel : ViewModelBase
         RefreshTierRecommendation();
         RefreshChartSections();
         this.RaisePropertyChanged(nameof(HasData));
+        this.RaisePropertyChanged(nameof(ShowNoInsightsFallback));
     }
 
     // Time range selection
@@ -470,6 +471,14 @@ public sealed class AnalyticsViewModel : ViewModelBase
     public string SecondaryInsight { get; private set; } = "";
     public bool HasInsights => !string.IsNullOrEmpty(PrimaryInsight);
 
+    /// <summary>
+    /// Shows the "no insights" fallback only when there is truly nothing to display:
+    /// no breakdown, no insights, no patterns, no cycle chart, and no tier recommendation.
+    /// </summary>
+    public bool ShowNoInsightsFallback =>
+        !ShowBreakdown && !HasInsights && PatternCards.Count == 0
+        && !ShowCycleComparison && !ShowTierRecommendation;
+
     private void RefreshInsights()
     {
         var util = _appState?.FiveHour?.Utilization ?? 0;
@@ -771,6 +780,7 @@ public sealed class AnalyticsViewModel : ViewModelBase
         RefreshCycleChart();
         RefreshTierRecommendation();
         RefreshChartSections();
+        this.RaisePropertyChanged(nameof(ShowNoInsightsFallback));
     }
 }
 

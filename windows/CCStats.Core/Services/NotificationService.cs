@@ -33,7 +33,7 @@ public sealed class NotificationService
 
     public void ShowPatternAlert(string title, string summary)
     {
-        var key = $"pattern_{title.GetHashCode()}";
+        var key = $"pattern_{title}";
         if (IsOnCooldown(key)) return;
 
         RaiseNotification(key, title, summary);

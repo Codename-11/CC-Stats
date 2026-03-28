@@ -28,4 +28,15 @@ public partial class AnalyticsWindow : Window
             };
         }
     }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        if (e.Key == Key.Escape)
+        {
+            Close();
+            e.Handled = true;
+        }
+    }
 }
