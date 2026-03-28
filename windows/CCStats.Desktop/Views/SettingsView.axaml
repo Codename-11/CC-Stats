@@ -254,6 +254,33 @@
                         HorizontalAlignment="Left" BorderThickness="0" />
             </Border>
 
+            <!-- About / Version -->
+            <Border Background="#0AFFFFFF" CornerRadius="4" Padding="12,8" Margin="0,6,0,0">
+                <StackPanel Spacing="4">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel>
+                            <TextBlock Text="CC-Stats (Windows)" FontSize="13"
+                                       FontWeight="SemiBold" Foreground="#F5F7FB" />
+                            <TextBlock Text="{Binding Settings.VersionText}"
+                                       FontSize="10" Foreground="#6B7A8D" />
+                        </StackPanel>
+                        <Button Grid.Column="1" Content="Check for Updates"
+                                Command="{Binding UpdateCommand}"
+                                FontSize="11" Padding="8,3" CornerRadius="3"
+                                Background="#1A3050" Foreground="#4A90D9"
+                                BorderThickness="0" VerticalAlignment="Center" />
+                    </Grid>
+                    <TextBlock IsVisible="{Binding ShowUpdateBadge}"
+                               FontSize="10" Foreground="#66B866">
+                        <TextBlock.Text>
+                            <MultiBinding StringFormat="{}Update available: {0}">
+                                <Binding Path="UpdateVersionText" />
+                            </MultiBinding>
+                        </TextBlock.Text>
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+
             <!-- Quit -->
             <Border Margin="0,4,0,0" Padding="12,6">
                 <Button Content="Quit CC-Stats"

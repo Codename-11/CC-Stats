@@ -73,6 +73,18 @@ public sealed class SettingsViewModel : ViewModelBase
     private bool _showClearDatabase;
     private bool _clearDatabaseConfirmPending;
 
+    // --- Version ---
+    public string VersionText
+    {
+        get
+        {
+            var asm = System.Reflection.Assembly.GetEntryAssembly()
+                   ?? System.Reflection.Assembly.GetExecutingAssembly();
+            var ver = asm.GetName().Version;
+            return ver is not null ? $"v{ver.Major}.{ver.Minor}.{ver.Build}" : "v0.1.0";
+        }
+    }
+
     public SettingsViewModel()
     {
         ClearDatabaseCommand = ReactiveCommand.Create(OnClearDatabase);
