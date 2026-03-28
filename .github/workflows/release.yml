@@ -38,7 +38,7 @@ jobs:
         with:
           name: release-windows
           path: |
-            release/CCStats.Desktop.exe
+            release/CCStats.exe
           if-no-files-found: error
 
   release:
@@ -56,7 +56,7 @@ jobs:
           path: artifacts
 
       - name: Rename artifact
-        run: mv artifacts/CCStats.Desktop.exe artifacts/CCStats-${{ github.ref_name }}-win-x64.exe
+        run: mv artifacts/CCStats.exe artifacts/CCStats-${{ github.ref_name }}-win-x64.exe
 
       - name: Check for release notes
         id: release_notes

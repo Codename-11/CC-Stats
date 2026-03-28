@@ -11,6 +11,7 @@
         x:Class="CCStats.Desktop.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="CC-Stats (Windows)"
+        Icon="/Assets/avalonia-logo.ico"
         Width="320"
         SizeToContent="Height"
         MaxHeight="700"
@@ -59,6 +60,14 @@
                         <TextBlock Text="&#x2715;" FontSize="11" Foreground="#6B7A8D" />
                     </Button>
                 </Grid>
+            </Border>
+
+            <!-- ═══ Toast banner (transient messages) ═══ -->
+            <Border IsVisible="{Binding ShowToast}"
+                    Background="#20F5F7FB" Padding="8,4" Margin="8,0">
+                <TextBlock Text="{Binding ToastMessage}"
+                           FontSize="11" Foreground="#F5F7FB"
+                           TextWrapping="Wrap" TextAlignment="Center" />
             </Border>
 
             <!-- ═══ Authenticated content (only when signed in + not in settings) ═══ -->
@@ -364,18 +373,29 @@
                                    Foreground="{Binding FreshnessColor}"
                                    Text="{Binding FreshnessText}" />
                     </Button>
-                    <Button Grid.Column="2" Classes="gear"
-                            Command="{Binding OpenSettingsCommand}"
-                            VerticalAlignment="Center"
-                            ToolTip.Tip="{Binding UpdateVersionText, StringFormat='Update {0} available', FallbackValue=Settings}">
-                        <Panel>
-                            <TextBlock Text="&#x2699;" FontSize="16" Foreground="#8FA0B8" />
-                            <Ellipse Width="6" Height="6" Fill="#4A90D9"
-                                     HorizontalAlignment="Right" VerticalAlignment="Top"
-                                     Margin="0,-1,-1,0"
-                                     IsVisible="{Binding ShowUpdateBadge}" />
-                        </Panel>
-                    </Button>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4"
+                                VerticalAlignment="Center">
+                        <Button Classes="gear"
+                                Command="{Binding UpdateCommand}"
+                                IsVisible="{Binding ShowUpdateBadge}"
+                                ToolTip.Tip="Click to install update">
+                            <Border Background="#154A90D9" CornerRadius="4" Padding="5,2">
+                                <TextBlock Text="{Binding UpdateVersionText, StringFormat='{}{0} ↓'}"
+                                           FontSize="10" Foreground="#4A90D9" />
+                            </Border>
+                        </Button>
+                        <Button Classes="gear"
+                                Command="{Binding OpenSettingsCommand}"
+                                ToolTip.Tip="Settings">
+                            <Panel>
+                                <TextBlock Text="&#x2699;" FontSize="16" Foreground="#8FA0B8" />
+                                <Ellipse Width="6" Height="6" Fill="#4A90D9"
+                                         HorizontalAlignment="Right" VerticalAlignment="Top"
+                                         Margin="0,-1,-1,0"
+                                         IsVisible="{Binding ShowUpdateBadge}" />
+                            </Panel>
+                        </Button>
+                    </StackPanel>
                 </Grid>
             </StackPanel>
 

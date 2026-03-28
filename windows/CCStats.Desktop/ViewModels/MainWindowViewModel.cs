@@ -56,6 +56,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     public event EventHandler<bool>? DockStateChanged;
     public event EventHandler<string>? SwitchAccountRequested;
     public event EventHandler<bool>? InlineAnalyticsChanged;
+    public event EventHandler? UpdateRequested;
 
     /// <summary>
     /// Shared AnalyticsViewModel used by both inline expanded view and popout window.
@@ -87,6 +88,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         ConfirmAccountNameCommand = ReactiveCommand.Create(ConfirmAccountName);
         CopyStatusCommand = ReactiveCommand.Create(OnCopyStatus);
         RefreshCommand = ReactiveCommand.Create(OnRefresh);
+        UpdateCommand = ReactiveCommand.Create(() => UpdateRequested?.Invoke(this, EventArgs.Empty));
     }
 
     // --- Service connection ---
@@ -521,6 +523,38 @@ public sealed class MainWindowViewModel : ViewModelBase
     public string StatusTitle => _state.ResolvedStatusMessage?.Title ?? string.Empty;
     public string StatusDetail => _state.ResolvedStatusMessage?.Detail ?? string.Empty;
 
+    // --- Toast banner (transient messages) ---
+
+    private string _toastMessage = "";
+    private bool _showToast;
+
+    public string ToastMessage
+    {
+        get => _toastMessage;
+        set => this.RaiseAndSetIfChanged(ref _toastMessage, value);
+    }
+
+    public bool ShowToast
+    {
+        get => _showToast;
+        set => this.RaiseAndSetIfChanged(ref _showToast, value);
+    }
+
+    /// <summary>Shows a transient message banner that auto-hides after a delay.</summary>
+    public void ShowToastMessage(string message, int durationMs = 5000)
+    {
+        ToastMessage = message;
+        ShowToast = true;
+        // Auto-hide after duration
+        _ = HideToastAfterDelay(durationMs);
+    }
+
+    private async System.Threading.Tasks.Task HideToastAfterDelay(int ms)
+    {
+        await System.Threading.Tasks.Task.Delay(ms);
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => ShowToast = false);
+    }
+
     // --- Update badge ---
 
     public bool ShowUpdateBadge
@@ -598,6 +632,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> ConfirmAccountNameCommand { get; }
     public ReactiveCommand<Unit, Unit> CopyStatusCommand { get; }
     public ReactiveCommand<Unit, Unit> RefreshCommand { get; }
+    public ReactiveCommand<Unit, Unit> UpdateCommand { get; }
 
     // --- Refresh (force immediate poll) ---
 

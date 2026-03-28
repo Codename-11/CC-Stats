@@ -11,6 +11,7 @@
         x:Class="CCStats.Desktop.Views.AnalyticsWindow"
         x:DataType="vm:AnalyticsViewModel"
         Title="Usage Analytics"
+        Icon="/Assets/avalonia-logo.ico"
         Width="500"
         Height="400"
         MinWidth="400"

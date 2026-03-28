@@ -73,6 +73,46 @@ public partial class App : Application
             _viewModel.QuitRequested += OnQuitRequested;
             _viewModel.SwitchAccountRequested += OnSwitchAccountRequested;
             _viewModel.RefreshRequested += (_, _) => _ = ForceImmediatePollAsync();
+            _viewModel.UpdateRequested += async (_, _) =>
+            {
+                if (_updateCheckService is null) return;
+                try
+                {
+                    Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage("Checking for updates...", 10000));
+
+                    var result = await _updateCheckService.CheckForUpdateAsync();
+                    if (result is null)
+                    {
+                        Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage("Already up to date."));
+                        return;
+                    }
+
+                    if (result.ExeDownloadUrl is null)
+                    {
+                        Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage($"{result.LatestVersion} available — download at GitHub.", 8000));
+                        return;
+                    }
+
+                    Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage($"Downloading {result.LatestVersion}...", 30000));
+
+                    var tempPath = await _updateCheckService.DownloadUpdateAsync(result.ExeDownloadUrl);
+                    if (tempPath is not null)
+                    {
+                        Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage("Installing update — restarting..."));
+                        await Task.Delay(1000); // brief pause so user sees the message
+                        UpdateCheckService.ApplyUpdateAndRestart(tempPath);
+                    }
+                    else
+                    {
+                        Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage("Download failed. Try again later.", 6000));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"[App] Update failed: {ex.Message}");
+                    Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage($"Update error: {ex.Message}", 8000));
+                }
+            };
 
             // Set up system tray icon
             _trayIconService = TrayIconService.Setup(
