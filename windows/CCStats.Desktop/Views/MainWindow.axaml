@@ -277,6 +277,22 @@
                         </Panel>
                     </Border>
 
+                    <!-- Chart key (compact) -->
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="4,0,4,4">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <Border Width="8" Height="2" Background="#66B866" CornerRadius="1" VerticalAlignment="Center" />
+                            <TextBlock Text="5h" FontSize="8" Foreground="#4A5568" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <Border Width="8" Height="1" Background="#4A90D9" VerticalAlignment="Center" />
+                            <TextBlock Text="7d" FontSize="8" Foreground="#4A5568" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <Border Width="6" Height="6" Background="#40F39A4B" CornerRadius="1" VerticalAlignment="Center" />
+                            <TextBlock Text="Reset" FontSize="8" Foreground="#4A5568" />
+                        </StackPanel>
+                    </StackPanel>
+
                     <!-- Insights -->
                     <StackPanel IsVisible="{Binding Analytics.HasInsights}" Margin="4,4,4,0" Spacing="1">
                         <TextBlock Text="{Binding Analytics.PrimaryInsight}" FontSize="11" Foreground="#F5F7FB" />

@@ -91,16 +91,28 @@
                             CornerRadius="4" />
                 </StackPanel>
 
-                <!-- Gap/outage legend -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                <!-- Chart key -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal" Spacing="3">
-                        <Border Width="10" Height="10" Background="#20808080" CornerRadius="2" />
-                        <TextBlock Text="Gap" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center" />
+                        <Border Width="12" Height="3" Background="#66B866" CornerRadius="1" VerticalAlignment="Center" />
+                        <TextBlock Text="5h" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="3">
-                        <Border Width="10" Height="10" Background="#20FF4444" CornerRadius="2" />
-                        <TextBlock Text="Outage" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center" />
+                        <Border Width="12" Height="1" VerticalAlignment="Center">
+                            <Border.Background>
+                                <SolidColorBrush Color="#4A90D9" />
+                            </Border.Background>
+                        </Border>
+                        <TextBlock Text="7d" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="3">
+                        <Border Width="8" Height="8" Background="#40F39A4B" CornerRadius="1" VerticalAlignment="Center" />
+                        <TextBlock Text="Reset" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="3">
+                        <Border Width="8" Height="8" Background="#14808080" CornerRadius="1" VerticalAlignment="Center" />
+                        <TextBlock Text="Gap" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center" />
                     </StackPanel>
                 </StackPanel>
 

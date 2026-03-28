@@ -24,11 +24,59 @@ public sealed class AnalyticsViewModel : ViewModelBase
     private AppState? _appState;
     private HashSet<string> _dismissedPatterns = new();
 
+    // Stable series objects — created once, values updated on refresh (prevents chart flash)
+    private readonly StepLineSeries<double> _fiveHourStepSeries;
+    private readonly LineSeries<double> _sevenDayLineSeries;
+    private readonly ColumnSeries<double> _fiveHourBarSeries;
+    private readonly LineSeries<double> _projectionSeries;
+
     public event EventHandler<string>? PatternDismissed;
 
     public AnalyticsViewModel()
     {
         SelectTimeRangeCommand = ReactiveCommand.Create<string>(OnSelectTimeRange);
+
+        _fiveHourStepSeries = new StepLineSeries<double>
+        {
+            Name = "5h utilization",
+            Fill = new SolidColorPaint(SKColor.Parse("#3366B866")),
+            Stroke = new SolidColorPaint(SKColor.Parse("#66B866")) { StrokeThickness = 2 },
+            GeometrySize = 0, GeometryFill = null, GeometryStroke = null,
+            AnimationsSpeed = TimeSpan.FromMilliseconds(300),
+        };
+        _sevenDayLineSeries = new LineSeries<double>
+        {
+            Name = "7d utilization",
+            Fill = null,
+            Stroke = new SolidColorPaint(SKColor.Parse("#4A90D9"))
+            {
+                StrokeThickness = 1.5f,
+                PathEffect = new DashEffect(new float[] { 6, 4 }),
+            },
+            GeometrySize = 0, GeometryFill = null, GeometryStroke = null,
+            LineSmoothness = 0,
+            AnimationsSpeed = TimeSpan.FromMilliseconds(300),
+        };
+        _fiveHourBarSeries = new ColumnSeries<double>
+        {
+            Name = "5h avg utilization",
+            Fill = new SolidColorPaint(SKColor.Parse("#66B866")),
+            MaxBarWidth = 12, Padding = 2,
+            AnimationsSpeed = TimeSpan.FromMilliseconds(300),
+        };
+        _projectionSeries = new LineSeries<double>
+        {
+            Name = "Projected exhaustion",
+            Fill = null,
+            Stroke = new SolidColorPaint(SKColor.Parse("#F0645B"))
+            {
+                StrokeThickness = 1.5f,
+                PathEffect = new DashEffect(new float[] { 4, 4 }),
+            },
+            GeometrySize = 0, GeometryFill = null, GeometryStroke = null,
+            LineSmoothness = 0,
+            AnimationsSpeed = TimeSpan.FromMilliseconds(300),
+        };
     }
 
     public void SetDismissedPatterns(IEnumerable<string> dismissed)
@@ -180,76 +228,38 @@ public sealed class AnalyticsViewModel : ViewModelBase
     /// </summary>
     private void RefreshChart()
     {
-        var series = new List<ISeries>();
+        var seriesList = new List<ISeries>();
 
         if (SelectedTimeRange == "24h")
         {
             if (_showFiveHour && _sparklineData.Count > 0)
             {
-                series.Add(new StepLineSeries<double>
-                {
-                    Values = _sparklineData.ToArray(),
-                    Name = "5h",
-                    Fill = new SolidColorPaint(SKColor.Parse("#3366B866")),
-                    Stroke = new SolidColorPaint(SKColor.Parse("#66B866")) { StrokeThickness = 2 },
-                    GeometrySize = 0,
-                    GeometryFill = null,
-                    GeometryStroke = null,
-                });
+                _fiveHourStepSeries.Values = _sparklineData.ToArray();
+                seriesList.Add(_fiveHourStepSeries);
             }
             if (_showSevenDay && _appState?.SevenDay is not null)
             {
-                var sevenDayUtil = _appState.SevenDay.Utilization;
-                series.Add(new LineSeries<double>
-                {
-                    Values = Enumerable.Repeat(sevenDayUtil, Math.Max(_sparklineData.Count, 2)).ToArray(),
-                    Name = "7d",
-                    Fill = null,
-                    Stroke = new SolidColorPaint(SKColor.Parse("#4A90D9"))
-                    {
-                        StrokeThickness = 1.5f,
-                        PathEffect = new DashEffect(new float[] { 6, 4 }),
-                    },
-                    GeometrySize = 0,
-                    GeometryFill = null,
-                    GeometryStroke = null,
-                    LineSmoothness = 0,
-                });
+                _sevenDayLineSeries.Values = Enumerable.Repeat(
+                    _appState.SevenDay.Utilization,
+                    Math.Max(_sparklineData.Count, 2)).ToArray();
+                seriesList.Add(_sevenDayLineSeries);
             }
         }
         else
         {
             if (_showFiveHour && _sparklineData.Count > 0)
             {
-                var bars = AggregateToBarData(_sparklineData, SelectedTimeRange);
-                series.Add(new ColumnSeries<double>
-                {
-                    Values = bars,
-                    Name = "5h avg",
-                    Fill = new SolidColorPaint(SKColor.Parse("#66B866")),
-                    MaxBarWidth = 12,
-                    Padding = 2,
-                });
+                _fiveHourBarSeries.Values = AggregateToBarData(_sparklineData, SelectedTimeRange);
+                seriesList.Add(_fiveHourBarSeries);
             }
             if (_showSevenDay && _appState?.SevenDay is not null)
             {
                 var barCount = _showFiveHour && _sparklineData.Count > 0
                     ? AggregateToBarData(_sparklineData, SelectedTimeRange).Length : 2;
-                series.Add(new LineSeries<double>
-                {
-                    Values = Enumerable.Repeat(_appState.SevenDay.Utilization, Math.Max(barCount, 2)).ToArray(),
-                    Name = "7d",
-                    Fill = null,
-                    Stroke = new SolidColorPaint(SKColor.Parse("#4A90D9"))
-                    {
-                        StrokeThickness = 1.5f,
-                        PathEffect = new DashEffect(new float[] { 6, 4 }),
-                    },
-                    GeometrySize = 0,
-                    GeometryFill = null,
-                    GeometryStroke = null,
-                    LineSmoothness = 0,
-                });
+                _sevenDayLineSeries.Values = Enumerable.Repeat(
+                    _appState.SevenDay.Utilization,
+                    Math.Max(barCount, 2)).ToArray();
+                seriesList.Add(_sevenDayLineSeries);
             }
         }
 
@@ -278,26 +288,13 @@ public sealed class AnalyticsViewModel : ViewModelBase
                         projectionValues.Add(Math.Min(100, projected));
                     }
 
-                    series.Add(new LineSeries<double>
-                    {
-                        Values = projectionValues.ToArray(),
-                        Name = "Projected",
-                        Fill = null,
-                        Stroke = new SolidColorPaint(SKColor.Parse("#F0645B"))
-                        {
-                            StrokeThickness = 1.5f,
-                            PathEffect = new DashEffect(new float[] { 4, 4 }),
-                        },
-                        GeometrySize = 0,
-                        GeometryFill = null,
-                        GeometryStroke = null,
-                        LineSmoothness = 0,
-                    });
+                    _projectionSeries.Values = projectionValues.ToArray();
+                    seriesList.Add(_projectionSeries);
                 }
             }
         }
 
-        AnalyticsSeries = series.ToArray();
+        AnalyticsSeries = seriesList.ToArray();
 
         // Update X axes based on time range and data count
         var labelCount = SelectedTimeRange == "24h" ? _sparklineData.Count

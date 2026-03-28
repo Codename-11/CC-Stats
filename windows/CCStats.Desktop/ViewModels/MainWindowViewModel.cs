@@ -75,6 +75,8 @@ public sealed class MainWindowViewModel : ViewModelBase
         _state = AppState.CreatePreviewSignedOut();
         _previewIndex = 0; // Signed out
         _analyticsVm = new AnalyticsViewModel();
+        SparklineSeries = new ISeries[] { _sparklineStepSeries };
+        RefreshSparklineSeries();
 
         SignInCommand = ReactiveCommand.Create(OnSignIn);
         OpenAnalyticsCommand = ReactiveCommand.Create(OnOpenAnalytics);
@@ -474,18 +476,24 @@ public sealed class MainWindowViewModel : ViewModelBase
         }
     }
 
-    public ISeries[] SparklineSeries => new ISeries[]
+    // Stable series object — only update Values to avoid chart flash on refresh
+    private readonly StepLineSeries<double> _sparklineStepSeries = new()
     {
-        new StepLineSeries<double>
-        {
-            Values = _state.SparklineData,
-            Fill = new SolidColorPaint(SKColor.Parse("#8066B866")), // 50% green
-            Stroke = new SolidColorPaint(SKColor.Parse("#66B866")) { StrokeThickness = 1.5f },
-            GeometrySize = 0,
-            GeometryFill = null,
-            GeometryStroke = null,
-        }
+        Fill = new SolidColorPaint(SKColor.Parse("#8066B866")),
+        Stroke = new SolidColorPaint(SKColor.Parse("#66B866")) { StrokeThickness = 1.5f },
+        GeometrySize = 0,
+        GeometryFill = null,
+        GeometryStroke = null,
+        AnimationsSpeed = TimeSpan.FromMilliseconds(300),
     };
+
+    public ISeries[] SparklineSeries { get; private set; }
+
+    private void RefreshSparklineSeries()
+    {
+        _sparklineStepSeries.Values = _state.SparklineData;
+        SparklineSeries ??= new ISeries[] { _sparklineStepSeries };
+    }
 
     public Axis[] SparklineXAxes => new Axis[]
     {
@@ -815,6 +823,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     public void ApplyState(AppState state)
     {
         _state = state;
+        RefreshSparklineSeries(); // Update values in-place (no flash)
         RaiseAllChanged();
         RefreshAnalytics();
     }
