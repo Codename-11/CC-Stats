@@ -59,6 +59,7 @@ public sealed class MainWindowViewModel : ViewModelBase
     public event EventHandler? UpdateRequested;
     public event EventHandler? ExportDatabaseRequested;
     public event EventHandler? PruneDatabaseRequested;
+    public event EventHandler? TestNotificationRequested;
 
     /// <summary>
     /// Shared AnalyticsViewModel used by both inline expanded view and popout window.
@@ -142,6 +143,9 @@ public sealed class MainWindowViewModel : ViewModelBase
         // Wire export/prune events
         _settings.ExportRequested += (_, _) => ExportDatabaseRequested?.Invoke(this, EventArgs.Empty);
         _settings.PruneRequested += (_, _) => PruneDatabaseRequested?.Invoke(this, EventArgs.Empty);
+
+        // Wire test notification
+        _settings.TestNotificationRequested += (_, _) => TestNotificationRequested?.Invoke(this, EventArgs.Empty);
 
         // Wire database size (fire-and-forget)
         if (database is not null)
@@ -324,6 +328,31 @@ public sealed class MainWindowViewModel : ViewModelBase
     public string FiveHourResetAbsolute => _state.FiveHour?.ResetsAt is { } reset
         ? DateTimeFormatting.AbsoluteTimeString(reset)
         : string.Empty;
+
+    // --- PromoClock peak/off-peak indicator ---
+
+    private string _promoClockLabel = "";
+    private bool _showPromoClock;
+
+    public string PromoClockLabel
+    {
+        get => _promoClockLabel;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _promoClockLabel, value);
+            this.RaisePropertyChanged(nameof(PromoClockColor));
+        }
+    }
+
+    public bool ShowPromoClock
+    {
+        get => _showPromoClock;
+        set => this.RaiseAndSetIfChanged(ref _showPromoClock, value);
+    }
+
+    public Color PromoClockColor => _promoClockLabel.Contains("Peak")
+        ? HeadroomColors.Warning    // orange for peak
+        : HeadroomColors.Normal;    // green for off-peak
 
     // --- 7d gauge section ---
 

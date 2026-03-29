@@ -102,6 +102,18 @@
                                     </TextBlock.Foreground>
                                 </TextBlock>
                             </Border>
+                            <!-- PromoClock peak indicator -->
+                            <Border IsVisible="{Binding ShowPromoClock}"
+                                    CornerRadius="4" Padding="5,2">
+                                <Border.Background>
+                                    <SolidColorBrush Color="{Binding PromoClockColor}" Opacity="0.15" />
+                                </Border.Background>
+                                <TextBlock Text="{Binding PromoClockLabel}" FontSize="10">
+                                    <TextBlock.Foreground>
+                                        <SolidColorBrush Color="{Binding PromoClockColor}" />
+                                    </TextBlock.Foreground>
+                                </TextBlock>
+                            </Border>
                         </StackPanel>
                         <controls:HeadroomRingGauge
                             Diameter="96" StrokeWidth="7"

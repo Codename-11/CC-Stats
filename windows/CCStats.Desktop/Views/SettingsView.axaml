@@ -81,6 +81,12 @@
                                       OnContent="" OffContent="" />
                     </ui:SettingsExpanderItem.Footer>
                 </ui:SettingsExpanderItem>
+                <ui:SettingsExpanderItem Content="Test notification">
+                    <ui:SettingsExpanderItem.Footer>
+                        <Button Content="Send Test" Command="{Binding Settings.TestNotificationCommand}"
+                                FontSize="12" Padding="10,4" />
+                    </ui:SettingsExpanderItem.Footer>
+                </ui:SettingsExpanderItem>
             </ui:SettingsExpander>
 
             <!-- Polling -->

@@ -96,6 +96,7 @@ public sealed class SettingsViewModel : ViewModelBase
         SwitchAccountCommand = ReactiveCommand.Create<string>(OnSwitchAccount);
         RemoveAccountCommand = ReactiveCommand.Create<string>(OnRemoveAccount);
         ResetToDefaultsCommand = ReactiveCommand.Create(OnResetToDefaults);
+        TestNotificationCommand = ReactiveCommand.Create(() => TestNotificationRequested?.Invoke(this, EventArgs.Empty));
         OpenPromoClockCommand = ReactiveCommand.Create(() =>
         {
             Process.Start(new ProcessStartInfo("https://promoclock.co/en") { UseShellExecute = true });
@@ -108,6 +109,7 @@ public sealed class SettingsViewModel : ViewModelBase
     public event EventHandler<string>? AccountRemoveRequested;
     public event EventHandler? ExportRequested;
     public event EventHandler? PruneRequested;
+    public event EventHandler? TestNotificationRequested;
 
     public ObservableCollection<AccountItemViewModel> Accounts { get; } = new();
 
@@ -238,6 +240,7 @@ public sealed class SettingsViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _promoClockTeamId, value);
     }
 
+    public ReactiveCommand<Unit, Unit> TestNotificationCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenPromoClockCommand { get; }
 
     // Database

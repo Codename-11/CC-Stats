@@ -39,6 +39,7 @@ public partial class App : Application
     private SlopeCalculationService? _sevenDaySlope;
     private NotificationService? _notificationService;
     private UpdateCheckService? _updateCheckService;
+    private PromoClockService? _promoClockService;
 
     private int _lastPollIntervalSeconds;
     private bool _wasDisconnected;
@@ -263,6 +264,9 @@ public partial class App : Application
         // 11. Update check service
         _updateCheckService = new UpdateCheckService();
 
+        // 12. PromoClock service
+        _promoClockService = new PromoClockService();
+
         // --- Wire events ---
         WirePollingEngine();
         WireOAuthFlow();
@@ -271,6 +275,15 @@ public partial class App : Application
 
         // --- Connect services to ViewModel ---
         _viewModel!.ConnectServices(_oauthService, _pollingEngine, _preferences, _secureStorage, _database);
+
+        // --- Wire test notification ---
+        _viewModel.TestNotificationRequested += (_, _) =>
+        {
+            _notificationService?.ShowThresholdAlert(HeadroomState.Warning, 15);
+        };
+
+        // --- Start PromoClock polling ---
+        _ = PollPromoClockAsync();
 
         // --- Wire pattern dismissal persistence ---
         _viewModel.Analytics.SetDismissedPatterns(_preferences.DismissedPatternFindings);
@@ -817,6 +830,43 @@ public partial class App : Application
         }
     }
 
+    // --- PromoClock Polling ---
+
+    private async Task PollPromoClockAsync()
+    {
+        while (true)
+        {
+            try
+            {
+                if (_preferences!.PromoClockEnabled && !string.IsNullOrEmpty(_preferences.PromoClockApiKey))
+                {
+                    var status = await _promoClockService!.GetStatusAsync(
+                        _preferences.PromoClockApiKey, _preferences.PromoClockTeamId);
+                    if (status is not null)
+                    {
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            _viewModel!.ShowPromoClock = true;
+                            _viewModel.PromoClockLabel = status.IsPeak ? "Peak" : "Off-Peak";
+                        });
+                    }
+                    else
+                    {
+                        Dispatcher.UIThread.Post(() => _viewModel!.ShowPromoClock = false);
+                    }
+                }
+                else
+                {
+                    Dispatcher.UIThread.Post(() => _viewModel!.ShowPromoClock = false);
+                }
+            }
+            catch { }
+
+            try { await Task.Delay(TimeSpan.FromMinutes(5)); }
+            catch (TaskCanceledException) { break; }
+        }
+    }
+
     // --- Clean Shutdown ---
 
     private void OnShutdownRequested(object? sender, ShutdownRequestedEventArgs e)
@@ -832,6 +882,7 @@ public partial class App : Application
         _oauthService?.Dispose();
         _tokenRefresh?.Dispose();
         _apiClient?.Dispose();
+        _promoClockService?.Dispose();
 
         // Dispose database — block briefly to ensure connection closes cleanly
         if (_database is not null)
