@@ -521,7 +521,17 @@ public partial class App : Application
         {
             Debug.WriteLine($"[App] Poll failed: {e.Error}");
             var state = _pollingEngine.CurrentState;
-            Dispatcher.UIThread.Post(() => _viewModel!.ApplyState(state));
+            // Don't downgrade from authenticated to unauthenticated on transient failures
+            // Only API 401 (TokenExpired) should trigger re-auth
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (state.OAuthState == OAuthState.Unauthenticated && _viewModel!.IsAuthenticated)
+                {
+                    Debug.WriteLine("[App] Ignoring poll state downgrade — keeping authenticated");
+                    return;
+                }
+                _viewModel!.ApplyState(state);
+            });
         };
     }
 

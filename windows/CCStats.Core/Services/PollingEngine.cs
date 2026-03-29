@@ -142,16 +142,18 @@ public sealed class PollingEngine : IDisposable
 
         try
         {
-            // Load credentials
+            // Load credentials — don't reset OAuthState on transient file read failures
             var credentials = _secureStorage.LoadCredentials();
             if (credentials is null || string.IsNullOrEmpty(credentials.AccessToken))
             {
                 UpdateState(state => state with
                 {
                     ConnectionStatus = ConnectionStatus.NoCredentials,
-                    OAuthState = OAuthState.Unauthenticated,
+                    // Keep existing OAuthState — only the API (401) should set Unauthenticated
+                    // A missing file is a transient issue, not a sign-out
                     LastAttempted = now,
                 });
+                PollFailed?.Invoke(this, new PollFailedEventArgs("No credentials available"));
                 return;
             }
 
