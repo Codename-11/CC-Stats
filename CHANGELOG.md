@@ -5,6 +5,27 @@ All notable changes to CC-Stats (Windows) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-03-29
+
+### Added
+- PromoClock integration (https://promoclock.co/en) — peak/off-peak badge in gauge header, API key + Team ID settings, 5-minute polling
+- Test notification button in Settings → Notifications for verifying toast alerts work
+- `/release` skill for Claude Code — automated version bump, changelog, release notes, tag, and push
+- Credential recovery after self-update — falls back to per-account files if main credentials.dat is missing
+- Periodic update check every 6 hours (was startup-only)
+
+### Changed
+- Default poll interval from 60s to 120s (halves idle API calls; adaptive polling still speeds to 15s when Claude active)
+
+### Fixed
+- Polling stall caused by SessionDetectionService crash (Win32Exception on process access) — wrapped with fallback
+- Sparkline "Building history..." delay — seeds 2 data points from local cache on startup
+- Chart flash on data refresh — series objects now stable with 300ms animation
+- Version stuck at 0.1.0 after self-update — release workflow injects version from git tag
+- Update badge showing truncated "v0" — replaced with clean ↑ icon
+- Settings gear click sometimes unresponsive — increased hit area from 20px to 28px
+- Self-update ran without confirmation — now requires two clicks
+
 ## [0.1.0] - 2026-03-28
 
 ### Added
