@@ -284,7 +284,35 @@ public partial class App : Application
         };
 
         // --- Auto-start if credentials exist ---
-        var credentials = _secureStorage.LoadCredentials();
+        StoredCredentials? credentials = null;
+        try
+        {
+            credentials = _secureStorage.LoadCredentials();
+            Debug.WriteLine($"[App] Credentials loaded: {(credentials is not null ? "yes" : "no")}, token: {(credentials?.AccessToken is not null ? "present" : "null")}");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"[App] Failed to load credentials: {ex.Message}");
+        }
+
+        // Also check account files if main credentials are missing
+        if (credentials is null || string.IsNullOrEmpty(credentials.AccessToken))
+        {
+            var accountIds = _secureStorage.ListAccounts();
+            Debug.WriteLine($"[App] No main credentials, checking {accountIds.Count} account files");
+            foreach (var id in accountIds)
+            {
+                var acct = _secureStorage.LoadAccountCredentials(id);
+                if (acct is not null && !string.IsNullOrEmpty(acct.AccessToken))
+                {
+                    credentials = acct;
+                    _secureStorage.SaveCredentials(acct); // promote to active
+                    Debug.WriteLine($"[App] Recovered credentials from account {id}");
+                    break;
+                }
+            }
+        }
+
         if (credentials is not null && !string.IsNullOrEmpty(credentials.AccessToken))
         {
             _apiClient.SetAccessToken(credentials.AccessToken);
