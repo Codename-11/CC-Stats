@@ -1,19 +1,24 @@
-﻿using Avalonia;
+using Avalonia;
 using ReactiveUI.Avalonia;
 using System;
+using System.Diagnostics;
+using System.IO;
 
 namespace CCStats.Desktop;
 
 sealed class Program
 {
-    // Initialization code. Don't use any Avalonia, third-party APIs or any
-    // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
-    // yet and stuff might break.
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+    public static void Main(string[] args)
+    {
+        // Redirect Debug.WriteLine to stderr so logs are visible in the terminal
+        // (Debug output is invisible outside a debugger by default)
+        Trace.Listeners.Add(new ConsoleTraceListener(useErrorStream: true));
 
-    // Avalonia configuration, don't remove; also used by visual designer.
+        BuildAvaloniaApp()
+            .StartWithClassicDesktopLifetime(args);
+    }
+
     public static AppBuilder BuildAvaloniaApp()
         => AppBuilder.Configure<App>()
             .UsePlatformDetect()
