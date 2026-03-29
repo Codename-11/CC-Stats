@@ -17,8 +17,10 @@ release/
 *~
 Thumbs.db
 
-# AI tool stubs
-.claude/
+# AI tool stubs (keep .claude/skills/ for Claude Code skills)
+.claude/*
+!.claude/skills/
+!.claude/skills/**
 .opencode/
 .subframe/
 
