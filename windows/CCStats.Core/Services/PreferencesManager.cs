@@ -47,7 +47,7 @@ public sealed class PreferencesManager
         get => _data.PollIntervalSeconds;
         set
         {
-            _data.PollIntervalSeconds = ValidPollIntervals.Contains(value) ? value : 60;
+            _data.PollIntervalSeconds = ValidPollIntervals.Contains(value) ? value : 120;
             Save();
         }
     }
@@ -253,7 +253,7 @@ public sealed class PreferencesManager
 
         if (!ValidPollIntervals.Contains(_data.PollIntervalSeconds))
         {
-            _data.PollIntervalSeconds = 60;
+            _data.PollIntervalSeconds = 120;
         }
 
         if (!ValidRetentionDays.Contains(_data.DataRetentionDays))
@@ -274,7 +274,7 @@ public sealed class PreferencesManager
     {
         public int WarningThreshold { get; set; } = 20;
         public int CriticalThreshold { get; set; } = 5;
-        public int PollIntervalSeconds { get; set; } = 60;
+        public int PollIntervalSeconds { get; set; } = 120;
         public int DataRetentionDays { get; set; } = 365;
         public int? CustomFiveHourCredits { get; set; }
         public int? CustomSevenDayCredits { get; set; }

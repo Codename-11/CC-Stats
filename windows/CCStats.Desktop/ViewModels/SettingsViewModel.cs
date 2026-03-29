@@ -61,7 +61,7 @@ public sealed class SettingsViewModel : ViewModelBase
     private bool _extraUsageAlert50;
     private bool _extraUsageAlert75;
     private bool _extraUsageAlert90;
-    private string _selectedPollInterval = "30s";
+    private string _selectedPollInterval = "2m";
     private string _selectedDataRetention = "90d";
     private string _fiveHourCreditLimit = string.Empty;
     private string _sevenDayCreditLimit = string.Empty;
