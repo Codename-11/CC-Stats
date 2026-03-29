@@ -970,10 +970,12 @@ public sealed class MainWindowViewModel : ViewModelBase
 
         var accountId = credentials.AccountId
             ?? Guid.NewGuid().ToString("N")[..8];
-        // Use the active state's tier if available (profile API may have resolved it)
-        var displayName = !string.IsNullOrWhiteSpace(_state.SubscriptionTier)
-            ? _state.SubscriptionTier
-            : credentials.DisplayName ?? "New Account";
+        // Use the name the user provided; only fall back to tier/default if blank
+        var displayName = !string.IsNullOrWhiteSpace(credentials.DisplayName)
+            ? credentials.DisplayName
+            : !string.IsNullOrWhiteSpace(_state.SubscriptionTier)
+                ? _state.SubscriptionTier
+                : "New Account";
         var withMeta = credentials with
         {
             AccountId = accountId,

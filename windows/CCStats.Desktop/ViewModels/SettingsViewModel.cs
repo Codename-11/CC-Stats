@@ -81,10 +81,25 @@ public sealed class SettingsViewModel : ViewModelBase
     {
         get
         {
-            var asm = System.Reflection.Assembly.GetEntryAssembly()
-                   ?? System.Reflection.Assembly.GetExecutingAssembly();
-            var ver = asm.GetName().Version;
-            return ver is not null ? $"v{ver.Major}.{ver.Minor}.{ver.Build}" : "v0.1.0";
+            // Try multiple sources — single-file publish can make GetEntryAssembly return null
+            var ver = System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version
+                   ?? System.Reflection.Assembly.GetExecutingAssembly().GetName().Version
+                   ?? typeof(SettingsViewModel).Assembly.GetName().Version;
+            if (ver is not null && (ver.Major > 0 || ver.Minor > 0 || ver.Build > 0))
+                return $"v{ver.Major}.{ver.Minor}.{ver.Build}";
+            // Last resort: read from the exe file version info
+            var exePath = Environment.ProcessPath;
+            if (exePath is not null)
+            {
+                try
+                {
+                    var fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(exePath);
+                    if (!string.IsNullOrEmpty(fvi.ProductVersion))
+                        return $"v{fvi.ProductVersion}";
+                }
+                catch { }
+            }
+            return "v0.2.0";
         }
     }
 
