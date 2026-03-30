@@ -5,6 +5,40 @@ All notable changes to CC-Stats (Windows) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-03-29
+
+### Added
+- **Self-registering install** — first launch creates Start Menu shortcut and Add/Remove Programs entry; `--uninstall` flag for clean removal
+- **193 xUnit tests** covering slope calculation, date formatting, rate limit tiers, app state, and account management
+- **Data source tracking** — UI badge shows API/Cached/Live with color-coded pill and detailed tooltip
+- **Polling spinner** with freshness timer and click-to-refresh feedback
+- **Pill-shaped toast notifications** with success/error/info types and slide-down animation
+- **Reset event markers** on charts — 5h resets (orange), 7d resets (blue)
+- **Declining trend level** (↘) for slope calculation when usage is dropping
+- **DB schema migrations** with automatic versioning and account_id tracking
+- **Local build scripts** (`build_local.ps1`, `build_local.sh`) matching CI output
+- **Screenshots** in README with reorganized feature documentation
+- **CI test step** — workflow now runs all 193 tests on every push
+
+### Changed
+- Branch renamed from `master` to `main`
+- Adaptive polling reduced from 15s to 30s when Claude Code is active (prevents rate limiting)
+- Slope calculation requires 3+ samples over 2+ minutes (prevents noisy predictions)
+- Chart series/axis objects are now stable (eliminates chart flash on poll refresh)
+- Analytics popout window: borderless with custom resize handles and centered drag bar
+
+### Fixed
+- Re-auth no longer creates duplicate accounts — matches existing accounts by tier
+- Rate limiting handled with exponential backoff and local cache fallback
+- Cache fallback correctly shows "Cached" badge (was showing "Live")
+- Popout analytics window blank render — fixed SystemDecorations and resize
+- 7-day reference line zigzag in bar mode — rendered as horizontal band
+- OAuth port binding retry with state replay prevention
+- Thread-safe preferences with atomic file writes
+- Secure storage: DPAPI buffer clearing, typed exception handling
+- Console encoding (em dash → -- for Windows codepage compatibility)
+- `build_local.ps1` param block ordering (must precede assignments)
+
 ## [0.2.1] - 2026-03-29
 
 ### Fixed

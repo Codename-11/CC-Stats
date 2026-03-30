@@ -220,6 +220,9 @@ public partial class App : Application
             // Initialize all services and wire them together
             InitializeServices();
 
+            // First-launch registration: Start Menu shortcut + Add/Remove Programs
+            AppInstallService.EnsureInstalled();
+
             // Wire shutdown hook
             desktop.ShutdownRequested += OnShutdownRequested;
         }
