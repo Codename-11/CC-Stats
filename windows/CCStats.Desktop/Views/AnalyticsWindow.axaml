@@ -88,37 +88,35 @@
                                 FontSize="12" Padding="10,4" CornerRadius="4" />
                     </StackPanel>
 
-                    <!-- Chart key -->
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10"
-                                HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal" Spacing="3">
+                    <!-- Chart key (wraps at narrow widths, synced with series toggles) -->
+                    <WrapPanel Grid.Column="1" Orientation="Horizontal"
+                               HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="3" Margin="5,0"
+                                    IsVisible="{Binding ShowFiveHour}">
                             <Border Width="12" Height="3" Background="#66B866" CornerRadius="1" VerticalAlignment="Center" />
                             <TextBlock Text="5h" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center" />
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="3">
-                            <Border Width="12" Height="1" VerticalAlignment="Center">
-                                <Border.Background>
-                                    <SolidColorBrush Color="#4A90D9" />
-                                </Border.Background>
-                            </Border>
+                        <StackPanel Orientation="Horizontal" Spacing="3" Margin="5,0"
+                                    IsVisible="{Binding ShowSevenDay}">
+                            <Border Width="12" Height="1" Background="#4A90D9" VerticalAlignment="Center" />
                             <TextBlock Text="7d" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center" />
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="3">
+                        <StackPanel Orientation="Horizontal" Spacing="3" Margin="5,0">
                             <Border Width="8" Height="8" Background="#60F39A4B" CornerRadius="1" VerticalAlignment="Center" />
-                            <TextBlock Text="5h" FontSize="9" Foreground="#F39A4B" VerticalAlignment="Center"
+                            <TextBlock Text="5h reset" FontSize="9" Foreground="#F39A4B" VerticalAlignment="Center"
                                        ToolTip.Tip="5-hour quota window reset" />
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="3">
+                        <StackPanel Orientation="Horizontal" Spacing="3" Margin="5,0">
                             <Border Width="8" Height="8" Background="#604A90D9" CornerRadius="1" VerticalAlignment="Center" />
-                            <TextBlock Text="7d" FontSize="9" Foreground="#4A90D9" VerticalAlignment="Center"
+                            <TextBlock Text="7d reset" FontSize="9" Foreground="#4A90D9" VerticalAlignment="Center"
                                        ToolTip.Tip="7-day quota window reset" />
                         </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="3">
+                        <StackPanel Orientation="Horizontal" Spacing="3" Margin="5,0">
                             <Border Width="8" Height="8" Background="#14808080" CornerRadius="1" VerticalAlignment="Center" />
-                            <TextBlock Text="No data" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center"
+                            <TextBlock Text="Gap" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center"
                                        ToolTip.Tip="No polls recorded during this period" />
                         </StackPanel>
-                    </StackPanel>
+                    </WrapPanel>
 
                     <!-- Series toggles -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12">
