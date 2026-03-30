@@ -5,6 +5,17 @@ All notable changes to CC-Stats (Windows) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-03-29
+
+### Fixed
+- **Multi-account OAuth** — adding a second account no longer overwrites the first; detects add-account vs re-auth by checking if polling is already running
+- **Toast dark theme** — dark backgrounds with status-colored borders instead of jarring light colors
+- **Data source badge** — renamed misleading "Live" to "Local", CredentialsOnly gets unique purple color, added hover tooltip, increased badge opacity
+- **Chart legend** — wraps at narrow widths instead of truncating, syncs visibility with series toggles, clearer labels ("5h reset" / "7d reset" / "Gap")
+
+### Changed
+- **PromoClock** — simplified to "Peak Hours Indicator" toggle-only; removed API Key and Team ID fields, uses local time-based peak detection
+
 ## [0.3.0] - 2026-03-29
 
 ### Added
