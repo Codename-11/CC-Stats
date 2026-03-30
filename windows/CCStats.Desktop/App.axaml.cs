@@ -428,8 +428,50 @@ public partial class App : Application
             _trayIconService?.UpdateIcon(0, HeadroomState.Disconnected, "CC-Stats — Not signed in");
         }
 
+        // --- Load historical sparkline from DB (don't wait for first poll) ---
+        _ = LoadStartupSparklineAsync(credentials);
+
         // --- Fire-and-forget: check for updates ---
         _ = CheckForUpdatesAsync();
+    }
+
+    /// <summary>
+    /// Load historical sparkline data from SQLite on startup so the chart shows
+    /// real history even when polls are failing (expired token, rate limited, etc.).
+    /// Falls back to local cache seed if DB has no data.
+    /// </summary>
+    private async Task LoadStartupSparklineAsync(StoredCredentials? credentials)
+    {
+        try
+        {
+            // Small delay to let DB init complete
+            await Task.Delay(500);
+
+            var dbSparkline = await _historyService!.GetSparklineDataAsync();
+            if (dbSparkline.Count >= 2)
+            {
+                AppLogger.Log("Startup", $"Loaded {dbSparkline.Count} sparkline points from DB");
+                _inMemorySparkline.Clear(); // DB has real data
+
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (_viewModel is null) return;
+                    var current = _viewModel.CurrentState;
+                    _viewModel.ApplyState(current with
+                    {
+                        SparklineData = dbSparkline,
+                    });
+                });
+            }
+            else
+            {
+                AppLogger.Log("Startup", $"DB has {dbSparkline.Count} sparkline points (insufficient)");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("Startup", "Failed to load startup sparkline from DB", ex);
+        }
     }
 
     private async Task CheckForUpdatesAsync()
