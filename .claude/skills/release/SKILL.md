@@ -34,7 +34,7 @@ Working tree clean?
 ### Pre-flight Checks
 
 1. **Verify clean working tree** — if there are uncommitted changes, STOP and warn the user. Releases must be made from a clean state.
-2. **Verify on master branch** — warn if not on `master`. Offer to merge `windows-port-spike` first.
+2. **Verify on main branch** — warn if not on `main`.
 3. **Verify build succeeds** — run `dotnet build windows/CCStats.Windows.sln --configuration Release` and confirm it completes without errors.
 
 ### Step 1: Determine Version
@@ -93,7 +93,7 @@ Commit with message: `chore(release): bump version to X.Y.Z`
 
 ```bash
 git tag vX.Y.Z
-git push origin master --tags
+git push origin main --tags
 ```
 
 Tell the user:

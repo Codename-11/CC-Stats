@@ -2,9 +2,9 @@ name: CI (Windows)
 
 on:
   push:
-    branches: [master, 'feature/**']
+    branches: [main, 'feature/**']
   pull_request:
-    branches: [master]
+    branches: [main]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -27,6 +27,9 @@ jobs:
 
       - name: Build
         run: dotnet build windows/CCStats.Windows.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test windows/CCStats.Tests/CCStats.Tests.csproj --configuration Release --no-restore --verbosity normal
 
       - name: Publish (self-contained)
         run: dotnet publish windows/CCStats.Desktop/CCStats.Desktop.csproj --configuration Release --runtime win-x64 --self-contained --output ./publish
