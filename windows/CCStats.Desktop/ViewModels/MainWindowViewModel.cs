@@ -1133,8 +1133,6 @@ public sealed class MainWindowViewModel : ViewModelBase
 
         // PromoClock
         _settings.PromoClockEnabled = _preferences.PromoClockEnabled;
-        _settings.PromoClockApiKey = _preferences.PromoClockApiKey ?? string.Empty;
-        _settings.PromoClockTeamId = _preferences.PromoClockTeamId ?? string.Empty;
     }
 
     // --- Multi-account loading ---
@@ -1283,14 +1281,6 @@ public sealed class MainWindowViewModel : ViewModelBase
                     break;
                 case nameof(SettingsViewModel.PromoClockEnabled):
                     _preferences.PromoClockEnabled = _settings.PromoClockEnabled;
-                    break;
-                case nameof(SettingsViewModel.PromoClockApiKey):
-                    _preferences.PromoClockApiKey = string.IsNullOrWhiteSpace(_settings.PromoClockApiKey)
-                        ? null : _settings.PromoClockApiKey;
-                    break;
-                case nameof(SettingsViewModel.PromoClockTeamId):
-                    _preferences.PromoClockTeamId = string.IsNullOrWhiteSpace(_settings.PromoClockTeamId)
-                        ? null : _settings.PromoClockTeamId;
                     break;
             }
         };

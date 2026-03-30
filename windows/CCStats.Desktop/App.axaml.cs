@@ -992,22 +992,18 @@ public partial class App : Application
         {
             try
             {
-                if (_preferences!.PromoClockEnabled && !string.IsNullOrEmpty(_preferences.PromoClockApiKey))
+                if (_preferences!.PromoClockEnabled)
                 {
-                    var status = await _promoClockService!.GetStatusAsync(
-                        _preferences.PromoClockApiKey, _preferences.PromoClockTeamId);
-                    if (status is not null)
+                    // Peak hours: weekdays 9 AM - 5 PM local time (highest API contention)
+                    var now = DateTime.Now;
+                    var isWeekday = now.DayOfWeek is >= DayOfWeek.Monday and <= DayOfWeek.Friday;
+                    var isPeak = isWeekday && now.Hour >= 9 && now.Hour < 17;
+
+                    Dispatcher.UIThread.Post(() =>
                     {
-                        Dispatcher.UIThread.Post(() =>
-                        {
-                            _viewModel!.ShowPromoClock = true;
-                            _viewModel.PromoClockLabel = status.IsPeak ? "Peak" : "Off-Peak";
-                        });
-                    }
-                    else
-                    {
-                        Dispatcher.UIThread.Post(() => _viewModel!.ShowPromoClock = false);
-                    }
+                        _viewModel!.ShowPromoClock = true;
+                        _viewModel.PromoClockLabel = isPeak ? "Peak" : "Off-Peak";
+                    });
                 }
                 else
                 {

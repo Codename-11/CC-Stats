@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reactive;
@@ -117,8 +116,6 @@ public sealed class SettingsViewModel : ViewModelBase
     private bool _showClearDatabase;
     private bool _clearDatabaseConfirmPending;
     private bool _promoClockEnabled;
-    private string _promoClockApiKey = "";
-    private string _promoClockTeamId = "";
 
     // --- Version ---
     public string VersionText
@@ -159,10 +156,6 @@ public sealed class SettingsViewModel : ViewModelBase
         CancelEditCommand = ReactiveCommand.Create<string>(OnCancelEdit);
         ResetToDefaultsCommand = ReactiveCommand.Create(OnResetToDefaults);
         TestNotificationCommand = ReactiveCommand.Create(() => TestNotificationRequested?.Invoke(this, EventArgs.Empty));
-        OpenPromoClockCommand = ReactiveCommand.Create(() =>
-        {
-            Process.Start(new ProcessStartInfo("https://promoclock.co/en") { UseShellExecute = true });
-        });
     }
 
     // --- Multi-account ---
@@ -290,20 +283,7 @@ public sealed class SettingsViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _promoClockEnabled, value);
     }
 
-    public string PromoClockApiKey
-    {
-        get => _promoClockApiKey;
-        set => this.RaiseAndSetIfChanged(ref _promoClockApiKey, value);
-    }
-
-    public string PromoClockTeamId
-    {
-        get => _promoClockTeamId;
-        set => this.RaiseAndSetIfChanged(ref _promoClockTeamId, value);
-    }
-
     public ReactiveCommand<Unit, Unit> TestNotificationCommand { get; }
-    public ReactiveCommand<Unit, Unit> OpenPromoClockCommand { get; }
 
     // Database
     public string DatabaseSize
