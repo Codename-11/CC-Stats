@@ -5,6 +5,16 @@ All notable changes to CC-Stats (Windows) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2026-03-30
+
+### Fixed
+- **Gauge shows last known data when API is down** -- PollFailed handler now preserves existing gauge values instead of resetting to 0% when the engine has no fresh data
+- **Startup restores gauge values from DB** -- when no local cache exists, loads the most recent poll's 5h/7d values from SQLite so gauges show real data immediately
+- **OAuth profile fetch timeout** -- profile API call during sign-in now uses 5s timeout instead of unlimited, preventing long hangs when API is unreachable
+- **Auth failure shows toast** -- OAuth failures now show error toast ("Sign-in failed: ...") instead of silently resetting to sign-in screen
+- **Auth errors preserve account state** -- if sign-in fails but stored accounts exist, app stays authenticated instead of dropping to sign-in
+- **Account naming flow protected** -- PollFailed no longer interferes with the account naming prompt during new account creation
+
 ## [0.3.3] - 2026-03-30
 
 ### Fixed
