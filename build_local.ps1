@@ -1,5 +1,3 @@
-$ErrorActionPreference = "Stop"
-
 <#
 .SYNOPSIS
     Build CC-Stats locally as a self-contained single-file exe, matching CI output.
@@ -26,6 +24,8 @@ param(
     [switch]$Run,
     [switch]$Clean
 )
+
+$ErrorActionPreference = "Stop"
 
 $repoRoot  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $slnPath   = Join-Path $repoRoot "windows\CCStats.Windows.sln"
