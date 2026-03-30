@@ -739,27 +739,34 @@ public partial class App : Application
                     SubscriptionType = resolvedTier,
                 };
 
-                // Try to match an existing account instead of creating a duplicate
+                // Determine if this is "add new account" vs "re-auth"
+                // If polling is already running, the user is authenticated and
+                // clicked "+ Add Account" from Settings — always create new.
                 var existingAccounts = _secureStorage!.ListAccounts();
+                var isAddingNewAccount = _pollingEngine!.IsRunning && existingAccounts.Count > 0;
+
                 string? matchedAccountId = null;
 
-                if (existingAccounts.Count == 1)
+                if (!isAddingNewAccount && existingAccounts.Count > 0)
                 {
-                    // Single account — almost certainly the same user re-authing
-                    matchedAccountId = existingAccounts[0];
-                    AppLogger.Log("Auth", $"Re-auth: matched single existing account {matchedAccountId}");
-                }
-                else if (existingAccounts.Count > 1)
-                {
-                    // Multiple accounts — try to match by subscription type
-                    foreach (var id in existingAccounts)
+                    // Re-auth flow: try to match an existing account
+                    if (existingAccounts.Count == 1)
                     {
-                        var existing = _secureStorage.LoadAccountCredentials(id);
-                        if (existing?.SubscriptionType == resolvedTier)
+                        matchedAccountId = existingAccounts[0];
+                        AppLogger.Log("Auth", $"Re-auth: matched single existing account {matchedAccountId}");
+                    }
+                    else
+                    {
+                        // Multiple accounts — try to match by subscription type
+                        foreach (var id in existingAccounts)
                         {
-                            matchedAccountId = id;
-                            AppLogger.Log("Auth", $"Re-auth: matched account {id} by tier {resolvedTier}");
-                            break;
+                            var existing = _secureStorage.LoadAccountCredentials(id);
+                            if (existing?.SubscriptionType == resolvedTier)
+                            {
+                                matchedAccountId = id;
+                                AppLogger.Log("Auth", $"Re-auth: matched account {id} by tier {resolvedTier}");
+                                break;
+                            }
                         }
                     }
                 }
@@ -795,10 +802,12 @@ public partial class App : Application
                 {
                     // Genuinely new account — prompt for name
                     _secureStorage.SaveCredentials(credentials);
-                    _pollingEngine!.Start();
+                    if (!_pollingEngine!.IsRunning)
+                        _pollingEngine.Start();
                     Dispatcher.UIThread.Post(() =>
                     {
-                        _viewModel!.PromptAccountName(credentials);
+                        _viewModel!.ShowSettings = false; // close settings to show naming prompt
+                        _viewModel.PromptAccountName(credentials);
                         _viewModel!.ApplyState(new AppState
                         {
                             OAuthState = OAuthState.Authenticated,

@@ -25,7 +25,7 @@ public static class UsageSourceExtensions
 {
     public static string Label(this UsageSource source) => source switch
     {
-        UsageSource.LocalCache => "Live",
+        UsageSource.LocalCache => "Local",
         UsageSource.Api => "API",
         UsageSource.Cached => "Cached",
         UsageSource.CredentialsOnly => "Tier",

@@ -677,23 +677,23 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     public IBrush ToastBackground => ToastType switch
     {
-        "success" => new SolidColorBrush(Color.Parse("#E8F5E9")),
-        "error" => new SolidColorBrush(Color.Parse("#FFEBEE")),
-        _ => new SolidColorBrush(Color.Parse("#E3F2FD")),
+        "success" => new SolidColorBrush(Color.Parse("#1A2E1A")),  // dark green
+        "error" => new SolidColorBrush(Color.Parse("#2E1A1A")),    // dark red
+        _ => new SolidColorBrush(Color.Parse("#1A1E2E")),          // dark blue
     };
 
     public IBrush ToastForeground => ToastType switch
     {
-        "success" => new SolidColorBrush(Color.Parse("#2E7D32")),
-        "error" => new SolidColorBrush(Color.Parse("#C62828")),
-        _ => new SolidColorBrush(Color.Parse("#1565C0")),
+        "success" => new SolidColorBrush(Color.Parse("#66B866")),  // green
+        "error" => new SolidColorBrush(Color.Parse("#F06050")),    // red
+        _ => new SolidColorBrush(Color.Parse("#6BA3D9")),          // blue
     };
 
     public string ToastIcon => ToastType switch
     {
-        "success" => "\u2713",
-        "error" => "!",
-        _ => "\u2139",
+        "success" => "\u2713",  // checkmark
+        "error" => "\u2717",    // cross mark
+        _ => "\u2139",          // info
     };
 
     /// <summary>Shows a transient toast that auto-hides. Type: "success", "error", or "info".</summary>
@@ -847,22 +847,24 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     public bool ShowDataSource => _state.DataSource != UsageSource.None && _state.IsAuthenticated;
 
+    public string DataSourceTooltip => _state.DataSource.Description();
+
     public IBrush DataSourceColor => _state.DataSource switch
     {
         UsageSource.LocalCache => new SolidColorBrush(Color.Parse("#4CAF50")), // green
         UsageSource.Api => new SolidColorBrush(Color.Parse("#4A90D9")),        // blue
         UsageSource.Cached => new SolidColorBrush(Color.Parse("#FF9800")),     // amber
-        UsageSource.CredentialsOnly => new SolidColorBrush(Color.Parse("#FF9800")),
+        UsageSource.CredentialsOnly => new SolidColorBrush(Color.Parse("#9C7CDB")), // purple
         _ => new SolidColorBrush(Color.Parse("#6B7A8D")),
     };
 
     public IBrush DataSourceBackground => _state.DataSource switch
     {
-        UsageSource.LocalCache => new SolidColorBrush(Color.Parse("#1A4CAF50")),
-        UsageSource.Api => new SolidColorBrush(Color.Parse("#1A4A90D9")),
-        UsageSource.Cached => new SolidColorBrush(Color.Parse("#1AFF9800")),
-        UsageSource.CredentialsOnly => new SolidColorBrush(Color.Parse("#1AFF9800")),
-        _ => new SolidColorBrush(Color.Parse("#1A6B7A8D")),
+        UsageSource.LocalCache => new SolidColorBrush(Color.Parse("#264CAF50")),
+        UsageSource.Api => new SolidColorBrush(Color.Parse("#264A90D9")),
+        UsageSource.Cached => new SolidColorBrush(Color.Parse("#26FF9800")),
+        UsageSource.CredentialsOnly => new SolidColorBrush(Color.Parse("#269C7CDB")),
+        _ => new SolidColorBrush(Color.Parse("#266B7A8D")),
     };
 
     /// <summary>Call from UI thread when a poll starts.</summary>
@@ -898,6 +900,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(ShowDataSource));
         this.RaisePropertyChanged(nameof(DataSourceColor));
         this.RaisePropertyChanged(nameof(DataSourceBackground));
+        this.RaisePropertyChanged(nameof(DataSourceTooltip));
         this.RaisePropertyChanged(nameof(FreshnessTooltip));
     }
 
@@ -912,6 +915,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(ShowDataSource));
         this.RaisePropertyChanged(nameof(DataSourceColor));
         this.RaisePropertyChanged(nameof(DataSourceBackground));
+        this.RaisePropertyChanged(nameof(DataSourceTooltip));
     }
 
     // --- Commands ---
@@ -1411,5 +1415,6 @@ public sealed class MainWindowViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(ShowDataSource));
         this.RaisePropertyChanged(nameof(DataSourceColor));
         this.RaisePropertyChanged(nameof(DataSourceBackground));
+        this.RaisePropertyChanged(nameof(DataSourceTooltip));
     }
 }

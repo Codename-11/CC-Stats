@@ -97,6 +97,7 @@
             <Border IsVisible="{Binding ShowToast}"
                     Classes="toastPill"
                     Background="{Binding ToastBackground}"
+                    BorderBrush="{Binding ToastForeground}" BorderThickness="1"
                     CornerRadius="14" Padding="12,6"
                     Margin="40,2,40,2"
                     HorizontalAlignment="Center"
@@ -461,7 +462,8 @@
                             <Border IsVisible="{Binding ShowDataSource}"
                                     Background="{Binding DataSourceBackground}"
                                     CornerRadius="6" Padding="5,1"
-                                    VerticalAlignment="Center">
+                                    VerticalAlignment="Center"
+                                    ToolTip.Tip="{Binding DataSourceTooltip}">
                                 <TextBlock Text="{Binding DataSourceLabel}"
                                            FontSize="9" FontWeight="SemiBold"
                                            Foreground="{Binding DataSourceColor}" />
