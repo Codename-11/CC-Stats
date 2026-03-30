@@ -585,16 +585,43 @@ public partial class App : Application
             // Only API 401 (TokenExpired) should trigger re-auth
             Dispatcher.UIThread.Post(() =>
             {
-                // Token expired/refresh failed is a genuine auth failure — let it through
-                var isAuthFailure = state.ConnectionStatus == ConnectionStatus.TokenExpired;
-                if (state.OAuthState == OAuthState.Unauthenticated && _viewModel!.IsAuthenticated && !isAuthFailure)
+                // Never downgrade to signed-out if we have stored accounts — show
+                // "session expired" in the status instead of the sign-in screen
+                var hasStoredAccounts = _secureStorage!.ListAccounts().Count > 0;
+                if (state.OAuthState == OAuthState.Unauthenticated && _viewModel!.IsAuthenticated)
                 {
-                    AppLogger.Log("Poll", "Ignoring auth state downgrade -- keeping authenticated");
-                    _viewModel!.UpdateDataSource(state.DataSource, state.CacheAgeSeconds);
+                    if (state.ConnectionStatus == ConnectionStatus.TokenExpired && hasStoredAccounts)
+                    {
+                        // Token expired but account exists — keep authenticated, show error
+                        AppLogger.Log("Poll", "Token expired but account exists -- keeping authenticated, prompting re-auth");
+                        _viewModel!.UpdateDataSource(state.DataSource, state.CacheAgeSeconds);
+                    }
+                    else
+                    {
+                        AppLogger.Log("Poll", "Ignoring auth state downgrade -- keeping authenticated");
+                        _viewModel!.UpdateDataSource(state.DataSource, state.CacheAgeSeconds);
+                    }
                 }
                 else
                 {
-                    _viewModel!.ApplyState(state);
+                    // Only show sign-in if we truly have no accounts
+                    if (state.OAuthState == OAuthState.Unauthenticated && hasStoredAccounts)
+                    {
+                        // Accounts exist but we're not authenticated yet — apply authenticated
+                        var acctCreds = _secureStorage.ListAccounts()
+                            .Select(id => _secureStorage.LoadAccountCredentials(id))
+                            .FirstOrDefault(c => c is not null);
+                        _viewModel!.ApplyState(state with
+                        {
+                            OAuthState = OAuthState.Authenticated,
+                            SubscriptionTier = acctCreds?.DisplayName ?? state.SubscriptionTier,
+                        });
+                        AppLogger.Log("Poll", "Promoted to authenticated -- stored accounts exist");
+                    }
+                    else
+                    {
+                        _viewModel!.ApplyState(state);
+                    }
                 }
                 // Always clear the spinner and show the error, even if state downgrade was ignored
                 // Append next retry time if the engine has computed an interval
