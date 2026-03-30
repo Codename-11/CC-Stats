@@ -1,14 +1,12 @@
-Fix for sign-in screen appearing when stored accounts exist but token has expired.
+Fix for flat sparkline chart after restart or token expiry.
 
 ## What's Changed
 
 ### Bug Fixes
-- **Auth state persistence** -- the app no longer shows the sign-in screen when you have a stored account but the session token has expired. Instead, the error is shown in the status line and the account context is preserved. Previously, an expired token after self-update or idle period would drop you to the sign-in screen even though your account data was intact.
+- **Sparkline history from DB** — the chart now loads historical usage data from SQLite on startup, independently of the poll cycle. Previously, the sparkline only showed 2 identical values seeded from the local cache (flat line) because DB history was only loaded in the PollCompleted handler — which never fires when polls fail due to expired tokens or rate limiting.
 
 ## Install
 
-Download `CCStats-v0.3.2-win-x64.exe` from the assets below and run it. Self-contained -- no .NET runtime needed.
-
-On first launch, CC-Stats creates a Start Menu shortcut and registers in Add/Remove Programs. To uninstall, use Add/Remove Programs or run `CCStats.exe --uninstall`.
+Download `CCStats-v0.3.3-win-x64.exe` from the assets below and run it. Self-contained — no .NET runtime needed.
 
 **Requirements:** Windows 10 (build 17763) or later.
