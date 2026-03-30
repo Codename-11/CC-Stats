@@ -23,6 +23,8 @@ public sealed record AppState
     public int? ExtraUsageUsedCreditsCents { get; init; }
     public double? ExtraUsageUtilization { get; init; }
     public IReadOnlyList<double> SparklineData { get; init; } = Array.Empty<double>();
+    public UsageSource DataSource { get; init; } = UsageSource.None;
+    public int? CacheAgeSeconds { get; init; }
 
     public bool IsAuthenticated => OAuthState == OAuthState.Authenticated;
     public bool IsUnauthenticated => OAuthState == OAuthState.Unauthenticated;

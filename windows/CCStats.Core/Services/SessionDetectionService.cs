@@ -72,8 +72,8 @@ public static class SessionDetectionService
     {
         if (!IsClaudeActive()) return configuredInterval;
 
-        // When Claude is active, poll at most every 15 seconds
-        // but never faster than what user configured if they set < 15
-        return Math.Min(configuredInterval, 15);
+        // When Claude is active, poll faster (30s) for better trend resolution
+        // but never faster than what user configured if they set < 30
+        return Math.Min(configuredInterval, 30);
     }
 }

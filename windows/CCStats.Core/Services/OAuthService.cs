@@ -42,12 +42,34 @@ public sealed class OAuthService : IDisposable
         _currentVerifier = verifier;
         _currentState = Guid.NewGuid().ToString("N");
 
-        var port = GetAvailablePort();
-        var redirectUri = $"http://localhost:{port}/callback";
+        HttpListener? listener = null;
+        int port = 0;
 
-        _listener = new HttpListener();
-        _listener.Prefixes.Add($"http://localhost:{port}/");
-        _listener.Start();
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            port = GetAvailablePort();
+            listener = new HttpListener();
+            listener.Prefixes.Add($"http://localhost:{port}/");
+            try
+            {
+                listener.Start();
+                break;
+            }
+            catch (HttpListenerException) when (attempt < 2)
+            {
+                try { listener.Close(); } catch { /* best-effort cleanup */ }
+                listener = null;
+            }
+            catch
+            {
+                try { listener.Close(); } catch { /* best-effort cleanup */ }
+                listener = null;
+                throw;
+            }
+        }
+
+        _listener = listener ?? throw new InvalidOperationException("Failed to bind HTTP listener after 3 attempts");
+        var redirectUri = $"http://localhost:{port}/callback";
 
         _timeoutCts = new CancellationTokenSource(AuthTimeout);
 
@@ -107,11 +129,13 @@ public sealed class OAuthService : IDisposable
                 return;
             }
 
-            if (code is null || state != _currentState)
+            if (_currentState is null || code is null || state != _currentState)
             {
                 AuthFailed?.Invoke(this, new AuthFailedEventArgs("Invalid callback: missing code or state mismatch"));
                 return;
             }
+
+            _currentState = null; // Prevent state replay
 
             await HandleCallbackAsync(code, redirectUri);
         }
@@ -133,15 +157,17 @@ public sealed class OAuthService : IDisposable
     {
         try
         {
+            var verifier = _currentVerifier
+                ?? throw new InvalidOperationException("Code verifier is not set");
+
             using var client = new HttpClient();
             var body = new Dictionary<string, string>
             {
                 ["grant_type"] = "authorization_code",
                 ["client_id"] = ClientId,
                 ["code"] = authCode,
-                ["state"] = _currentState!,
                 ["redirect_uri"] = redirectUri,
-                ["code_verifier"] = _currentVerifier!,
+                ["code_verifier"] = verifier,
             };
             var content = new StringContent(
                 System.Text.Json.JsonSerializer.Serialize(body),
@@ -162,6 +188,10 @@ public sealed class OAuthService : IDisposable
         catch (Exception ex)
         {
             AuthFailed?.Invoke(this, new AuthFailedEventArgs(ex.Message));
+        }
+        finally
+        {
+            _currentVerifier = null;
         }
     }
 

@@ -17,13 +17,17 @@ public sealed class PollingEngine : IDisposable
 
     private int _consecutiveFailures;
     private bool _outageActive;
+    private TimeSpan? _retryAfterOverride;
+    private bool _authFailed; // stops poll loop from retrying expired tokens
 
     private readonly object _lock = new();
+    private readonly SemaphoreSlim _pollGate = new(1, 1); // prevent concurrent polls
     private CancellationTokenSource? _cts;
     private Task? _pollingTask;
 
     private AppState _currentState = new();
 
+    public event EventHandler? PollStarting;
     public event EventHandler<PollCompletedEventArgs>? PollCompleted;
     public event EventHandler<PollFailedEventArgs>? PollFailed;
 
@@ -31,6 +35,9 @@ public sealed class PollingEngine : IDisposable
     {
         get { lock (_lock) return _currentState; }
     }
+
+    /// <summary>The most recently computed poll interval (for UI display).</summary>
+    public TimeSpan LastComputedInterval { get; private set; }
 
     public bool IsRunning { get { lock (_lock) return _pollingTask is not null && !_pollingTask.IsCompleted; } }
 
@@ -55,6 +62,9 @@ public sealed class PollingEngine : IDisposable
     public void Start()
     {
         Stop();
+        _authFailed = false;
+        _consecutiveFailures = 0;
+        _retryAfterOverride = null;
         var cts = new CancellationTokenSource();
         var task = PollLoopAsync(cts.Token);
         lock (_lock)
@@ -89,12 +99,22 @@ public sealed class PollingEngine : IDisposable
 
     public async Task PollOnceAsync(CancellationToken cancellationToken = default)
     {
-        await ExecutePollCycleAsync(cancellationToken);
+        if (_authFailed) return; // token expired — need re-auth, not retry
+        if (!await _pollGate.WaitAsync(0, cancellationToken)) return;
+        try
+        {
+            await ExecutePollCycleAsync(cancellationToken);
+        }
+        finally
+        {
+            _pollGate.Release();
+        }
     }
 
     public void Dispose()
     {
         Stop();
+        _pollGate.Dispose();
     }
 
     private async Task PollLoopAsync(CancellationToken cancellationToken)
@@ -103,7 +123,15 @@ public sealed class PollingEngine : IDisposable
         {
             try
             {
-                await ExecutePollCycleAsync(cancellationToken);
+                await _pollGate.WaitAsync(cancellationToken);
+                try
+                {
+                    await ExecutePollCycleAsync(cancellationToken);
+                }
+                finally
+                {
+                    _pollGate.Release();
+                }
             }
             catch (OperationCanceledException)
             {
@@ -111,23 +139,15 @@ public sealed class PollingEngine : IDisposable
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[PollingEngine] Poll cycle failed: {ex.Message}");
+                AppLogger.Error("Poll", "Poll cycle exception", ex);
             }
 
             try
             {
-                int seconds;
-                try
-                {
-                    seconds = _preferences.AdaptivePolling
-                        ? SessionDetectionService.GetAdaptiveInterval(_preferences.PollIntervalSeconds)
-                        : _preferences.PollIntervalSeconds;
-                }
-                catch
-                {
-                    seconds = _preferences.PollIntervalSeconds; // fallback if session detection fails
-                }
-                await Task.Delay(TimeSpan.FromSeconds(Math.Max(10, seconds)), cancellationToken);
+                var interval = ComputeNextInterval();
+                LastComputedInterval = interval;
+                AppLogger.Log("Poll", $"Next in {interval.TotalSeconds:F0}s (failures: {_consecutiveFailures}, retryAfter: {_retryAfterOverride?.TotalSeconds.ToString("F0") ?? "none"})");
+                await Task.Delay(interval, cancellationToken);
             }
             catch (OperationCanceledException)
             {
@@ -138,7 +158,11 @@ public sealed class PollingEngine : IDisposable
 
     private async Task ExecutePollCycleAsync(CancellationToken cancellationToken)
     {
+        // Don't retry if auth has permanently failed — wait for re-auth via Start()
+        if (_authFailed) return;
+
         var now = DateTimeOffset.UtcNow;
+        PollStarting?.Invoke(this, EventArgs.Empty);
 
         try
         {
@@ -146,6 +170,8 @@ public sealed class PollingEngine : IDisposable
             var credentials = _secureStorage.LoadCredentials();
             if (credentials is null || string.IsNullOrEmpty(credentials.AccessToken))
             {
+                _consecutiveFailures = 0;
+                _retryAfterOverride = null;
                 UpdateState(state => state with
                 {
                     ConnectionStatus = ConnectionStatus.NoCredentials,
@@ -162,22 +188,28 @@ public sealed class PollingEngine : IDisposable
             {
                 if (string.IsNullOrEmpty(credentials.RefreshToken))
                 {
+                    _consecutiveFailures = 0;
+                    _retryAfterOverride = null;
                     UpdateState(state => state with
                     {
                         ConnectionStatus = ConnectionStatus.TokenExpired,
                         LastAttempted = now,
                     });
+                    PollFailed?.Invoke(this, new PollFailedEventArgs("Session expired"));
                     return;
                 }
 
                 var refreshResult = await _tokenRefreshService.RefreshTokenAsync(credentials.RefreshToken, cancellationToken);
                 if (!refreshResult.IsSuccess)
                 {
+                    _authFailed = true; // stop poll loop from retrying
                     UpdateState(state => state with
                     {
                         ConnectionStatus = ConnectionStatus.TokenExpired,
+                        OAuthState = OAuthState.Unauthenticated,
                         LastAttempted = now,
                     });
+                    PollFailed?.Invoke(this, new PollFailedEventArgs("Token refresh failed - sign in again"));
                     return;
                 }
 
@@ -281,6 +313,8 @@ public sealed class PollingEngine : IDisposable
             {
                 ConnectionStatus = ConnectionStatus.Connected,
                 OAuthState = OAuthState.Authenticated,
+                DataSource = Models.UsageSource.Api,
+                CacheAgeSeconds = null,
                 LastUpdated = now,
                 LastAttempted = now,
                 SubscriptionTier = tier.DisplayName(),
@@ -306,6 +340,7 @@ public sealed class PollingEngine : IDisposable
                 _outageActive = false;
             }
             _consecutiveFailures = 0;
+            _retryAfterOverride = null;
 
             PollCompleted?.Invoke(this, new PollCompletedEventArgs(now));
         }
@@ -320,7 +355,21 @@ public sealed class PollingEngine : IDisposable
         }
         catch (ApiRateLimitException ex)
         {
-            PollFailed?.Invoke(this, new PollFailedEventArgs($"Rate limited: retry after {ex.RetryAfter.TotalSeconds}s"));
+            _retryAfterOverride = ex.RetryAfter > TimeSpan.Zero ? ex.RetryAfter : TimeSpan.FromSeconds(30);
+
+            // Fallback: try local cache — records to DB and fires PollCompleted if successful
+            var cacheApplied = await TryApplyLocalCacheFallbackAsync(now);
+            if (cacheApplied)
+            {
+                // Cache provided data — reset backoff entirely
+                _consecutiveFailures = 0;
+                _retryAfterOverride = null;
+            }
+            else
+            {
+                _consecutiveFailures++;
+                PollFailed?.Invoke(this, new PollFailedEventArgs("Rate limited"));
+            }
         }
         catch (OperationCanceledException)
         {
@@ -343,11 +392,92 @@ public sealed class PollingEngine : IDisposable
         }
     }
 
+    /// <summary>
+    /// Computes the next polling interval with exponential backoff on consecutive failures.
+    /// Retry-After from 429 acts as a floor. Capped at 3600 seconds (1 hour).
+    /// </summary>
+    private TimeSpan ComputeNextInterval()
+    {
+        int baseSeconds;
+        try
+        {
+            baseSeconds = _preferences.AdaptivePolling
+                ? SessionDetectionService.GetAdaptiveInterval(_preferences.PollIntervalSeconds)
+                : _preferences.PollIntervalSeconds;
+        }
+        catch
+        {
+            baseSeconds = _preferences.PollIntervalSeconds;
+        }
+
+        var retryFloor = _retryAfterOverride ?? TimeSpan.Zero;
+
+        if (_consecutiveFailures <= 1)
+        {
+            var interval = Math.Max(baseSeconds, retryFloor.TotalSeconds);
+            return TimeSpan.FromSeconds(Math.Min(Math.Max(interval, 10), 3600));
+        }
+
+        // Exponential backoff: base * 2^(failures-1), capped at 1 hour
+        var exponent = Math.Min(_consecutiveFailures - 1, 10);
+        var backoff = baseSeconds * Math.Pow(2, exponent);
+        var final = Math.Min(Math.Max(backoff, retryFloor.TotalSeconds), 3600);
+        return TimeSpan.FromSeconds(Math.Max(final, 10));
+    }
+
     private void UpdateState(Func<AppState, AppState> updater)
     {
         lock (_lock)
         {
             _currentState = updater(_currentState);
+        }
+    }
+
+    /// <summary>
+    /// When API fails, try to update state from Claude Code's local statusline cache.
+    /// This provides fresher data than the last successful poll.
+    /// </summary>
+    /// <summary>
+    /// When API fails, try local cache. Records to DB and fires PollCompleted if data found.
+    /// Returns true if cache was applied (caller should skip PollFailed).
+    /// </summary>
+    private async Task<bool> TryApplyLocalCacheFallbackAsync(DateTimeOffset now)
+    {
+        try
+        {
+            var cache = LocalCacheService.ReadCache();
+            if (cache?.FiveHourUtilization is null) return false;
+
+            var fhReset = ParseTimestamp(cache.FiveHourResetsAt);
+            var sdReset = ParseTimestamp(cache.SevenDayResetsAt);
+            var cacheAge = cache.FetchedAt.HasValue
+                ? (int)(DateTimeOffset.UtcNow - cache.FetchedAt.Value).TotalSeconds
+                : (int?)null;
+
+            UpdateState(state => state with
+            {
+                DataSource = Models.UsageSource.Cached,
+                CacheAgeSeconds = cacheAge,
+                // Keep existing ConnectionStatus — we're rate-limited, not truly connected
+                OAuthState = OAuthState.Authenticated,
+                FiveHour = new Models.WindowState(cache.FiveHourUtilization.Value, fhReset),
+                SevenDay = cache.SevenDayUtilization is not null
+                    ? new Models.WindowState(cache.SevenDayUtilization.Value, sdReset)
+                    : state.SevenDay,
+                LastUpdated = now, // use current time, not stale cache time
+                ExtraUsageEnabled = cache.ExtraUsageEnabled ?? state.ExtraUsageEnabled,
+                ExtraUsageUtilization = cache.ExtraUsageUtilization ?? state.ExtraUsageUtilization,
+            });
+
+            // PollCompleted handler will record to DB — don't insert here (avoids double-recording)
+            PollCompleted?.Invoke(this, new PollCompletedEventArgs(now));
+            AppLogger.Log("Poll", $"Cache fallback OK ({cacheAge}s old, 5h={cache.FiveHourUtilization:F0}%)");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[PollingEngine] Local cache fallback failed: {ex.Message}");
+            return false;
         }
     }
 

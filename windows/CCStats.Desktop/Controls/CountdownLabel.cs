@@ -85,8 +85,9 @@ public class CountdownLabel : UserControl
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
-        _timer.Start();
         UpdateDisplay();
+        if (IsVisible)
+            _timer.Start();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)

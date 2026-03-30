@@ -46,7 +46,7 @@ public sealed class AnalyticsViewModel : ViewModelBase
         };
         _sevenDayLineSeries = new LineSeries<double>
         {
-            Name = "7d utilization",
+            Name = "7d weekly limit",
             Fill = null,
             Stroke = new SolidColorPaint(SKColor.Parse("#4A90D9"))
             {
@@ -54,12 +54,12 @@ public sealed class AnalyticsViewModel : ViewModelBase
                 PathEffect = new DashEffect(new float[] { 6, 4 }),
             },
             GeometrySize = 0, GeometryFill = null, GeometryStroke = null,
-            LineSmoothness = 0,
+            LineSmoothness = 1, // smooth the line to avoid zigzag in bar mode
             AnimationsSpeed = TimeSpan.FromMilliseconds(300),
         };
         _fiveHourBarSeries = new ColumnSeries<double>
         {
-            Name = "5h avg utilization",
+            Name = "5h avg",
             Fill = new SolidColorPaint(SKColor.Parse("#66B866")),
             MaxBarWidth = 12, Padding = 2,
             AnimationsSpeed = TimeSpan.FromMilliseconds(300),
@@ -77,6 +77,13 @@ public sealed class AnalyticsViewModel : ViewModelBase
             LineSmoothness = 0,
             AnimationsSpeed = TimeSpan.FromMilliseconds(300),
         };
+
+        // Stable axis arrays — created once, labels updated in-place
+        AnalyticsXAxes = new[] { _xAxis };
+        AnalyticsYAxes = new[] { _yAxis };
+        CycleSeries = new ISeries[] { _cycleBarSeries };
+        CycleXAxes = new[] { _cycleXAxis };
+        CycleYAxes = new[] { _cycleYAxis };
     }
 
     public void SetDismissedPatterns(IEnumerable<string> dismissed)
@@ -88,10 +95,14 @@ public sealed class AnalyticsViewModel : ViewModelBase
     /// Updates data and refreshes all chart/insight state.
     /// Called from MainWindowViewModel when poll data changes.
     /// </summary>
-    public void UpdateData(IReadOnlyList<double> sparklineData, AppState state)
+    private IReadOnlyList<CCStats.Core.Models.ResetEvent> _resetEvents = Array.Empty<CCStats.Core.Models.ResetEvent>();
+
+    public void UpdateData(IReadOnlyList<double> sparklineData, AppState state,
+        IReadOnlyList<CCStats.Core.Models.ResetEvent>? resetEvents = null)
     {
         _sparklineData = sparklineData;
         _appState = state;
+        _resetEvents = resetEvents ?? Array.Empty<CCStats.Core.Models.ResetEvent>();
         RefreshChart();
         RefreshBreakdown();
         RefreshInsights();
@@ -166,6 +177,11 @@ public sealed class AnalyticsViewModel : ViewModelBase
 
     public RectangularSection[] ChartSections { get; private set; } = Array.Empty<RectangularSection>();
 
+    // Reset colors by window type
+    private static readonly SKColor ResetColor5h = SKColor.Parse("#60F39A4B");   // orange
+    private static readonly SKColor ResetColor7d = SKColor.Parse("#604A90D9");   // blue
+    private static readonly SKColor ResetColorOther = SKColor.Parse("#60E6C15A"); // yellow
+
     private void RefreshChartSections()
     {
         var sections = new List<RectangularSection>();
@@ -185,25 +201,76 @@ public sealed class AnalyticsViewModel : ViewModelBase
                     {
                         Xi = gapStart,
                         Xj = gapEnd,
-                        Fill = new SolidColorPaint(SKColor.Parse("#14808080")), // 8% gray
+                        Fill = new SolidColorPaint(SKColor.Parse("#14808080")),
                     });
                 }
             }
 
-            // Detect reset boundaries: sharp drops in utilization (>30% drop between adjacent points)
-            for (int i = 1; i < _sparklineData.Count; i++)
+            // Use real reset events from DB when available, color-coded by window type
+            if (_resetEvents.Count > 0)
             {
-                if (_sparklineData[i - 1] - _sparklineData[i] > 30)
+                var totalHours = SelectedTimeRange switch
                 {
-                    // Add a thin vertical orange line at the reset point
+                    "24h" => 24.0, "7d" => 168.0, "30d" => 720.0, _ => 720.0,
+                };
+                var now = DateTimeOffset.UtcNow;
+                // Use aggregated bar count for non-24h modes so markers align with bars
+                var dataPoints = SelectedTimeRange == "24h"
+                    ? _sparklineData.Count
+                    : (_sparklineData.Count > 0
+                        ? AggregateToBarData(_sparklineData, SelectedTimeRange).Length
+                        : _sparklineData.Count);
+
+                foreach (var evt in _resetEvents)
+                {
+                    // Map reset timestamp to x-axis position
+                    var hoursAgo = (now - evt.Timestamp).TotalHours;
+                    if (hoursAgo < 0 || hoursAgo > totalHours) continue;
+                    var xPos = dataPoints * (1.0 - hoursAgo / totalHours);
+
+                    var color = evt.WindowType switch
+                    {
+                        "five_hour" => ResetColor5h,
+                        "seven_day" => ResetColor7d,
+                        _ => ResetColorOther,
+                    };
+
                     sections.Add(new RectangularSection
                     {
-                        Xi = i - 0.5,
-                        Xj = i + 0.5,
-                        Fill = new SolidColorPaint(SKColor.Parse("#40F39A4B")), // orange at 25%
+                        Xi = xPos - 0.4,
+                        Xj = xPos + 0.4,
+                        Fill = new SolidColorPaint(color),
                     });
                 }
             }
+            else
+            {
+                // Fallback: detect from sparkline data (no DB events yet)
+                for (int i = 1; i < _sparklineData.Count; i++)
+                {
+                    if (_sparklineData[i - 1] - _sparklineData[i] > 10)
+                    {
+                        sections.Add(new RectangularSection
+                        {
+                            Xi = i - 0.4,
+                            Xj = i + 0.4,
+                            Fill = new SolidColorPaint(ResetColor5h),
+                        });
+                    }
+                }
+            }
+        }
+
+        // In bar mode, add 7d as a horizontal reference line (not a LineSeries — avoids zigzag)
+        if (SelectedTimeRange != "24h" && _showSevenDay && _appState?.SevenDay is not null)
+        {
+            var util = _appState.SevenDay.Utilization;
+            sections.Add(new RectangularSection
+            {
+                Yi = util - 0.5,
+                Yj = util + 0.5,
+                Fill = new SolidColorPaint(SKColor.Parse("#4A90D9")),
+            });
         }
 
         ChartSections = sections.ToArray();
@@ -213,22 +280,47 @@ public sealed class AnalyticsViewModel : ViewModelBase
     // --- LiveCharts2 Series (stored, not computed) ---
 
     private ISeries[] _analyticsSeries = Array.Empty<ISeries>();
+    private string _lastSeriesKey = ""; // tracks structure to avoid unnecessary array replacement
+
     public ISeries[] AnalyticsSeries
     {
         get => _analyticsSeries;
         private set => this.RaiseAndSetIfChanged(ref _analyticsSeries, value);
     }
 
-    private Axis[] _analyticsXAxesStored = Array.Empty<Axis>();
+    // Stable axis objects — created once, labels updated in-place
+    private readonly Axis _xAxis = new()
+    {
+        Labels = Array.Empty<string>(),
+        TextSize = 9,
+        LabelsPaint = new SolidColorPaint(SKColor.Parse("#6B7A8D")),
+        ShowSeparatorLines = false,
+        LabelsRotation = 0,
+    };
+
+    private readonly Axis _yAxis = new()
+    {
+        Name = "Utilization %",
+        NamePaint = new SolidColorPaint(SKColor.Parse("#8FA0B8")),
+        NameTextSize = 11,
+        ShowSeparatorLines = true,
+        SeparatorsPaint = new SolidColorPaint(SKColor.Parse("#202A38")) { StrokeThickness = 1 },
+        LabelsPaint = new SolidColorPaint(SKColor.Parse("#6B7A8D")),
+        TextSize = 10,
+        MinLimit = 0,
+        MaxLimit = 100,
+        ForceStepToMin = true,
+        MinStep = 20, // 0, 20, 40, 60, 80, 100
+    };
 
     /// <summary>
-    /// Rebuilds AnalyticsSeries and AnalyticsXAxes from current data/settings.
-    /// LiveCharts2 needs stable series objects that are replaced as a whole array,
-    /// not computed fresh on every property read.
+    /// Updates series values in-place. Only replaces the AnalyticsSeries array
+    /// when the series structure changes (time range or toggle), not on data-only updates.
     /// </summary>
     private void RefreshChart()
     {
         var seriesList = new List<ISeries>();
+        var hasProjection = false;
 
         if (SelectedTimeRange == "24h")
         {
@@ -252,15 +344,8 @@ public sealed class AnalyticsViewModel : ViewModelBase
                 _fiveHourBarSeries.Values = AggregateToBarData(_sparklineData, SelectedTimeRange);
                 seriesList.Add(_fiveHourBarSeries);
             }
-            if (_showSevenDay && _appState?.SevenDay is not null)
-            {
-                var barCount = _showFiveHour && _sparklineData.Count > 0
-                    ? AggregateToBarData(_sparklineData, SelectedTimeRange).Length : 2;
-                _sevenDayLineSeries.Values = Enumerable.Repeat(
-                    _appState.SevenDay.Utilization,
-                    Math.Max(barCount, 2)).ToArray();
-                seriesList.Add(_sevenDayLineSeries);
-            }
+            // 7d in bar mode is rendered as a RectangularSection reference line
+            // (see RefreshChartSections) — no LineSeries needed here
         }
 
         // Add projection line if slope is rising (only for 24h view)
@@ -269,7 +354,7 @@ public sealed class AnalyticsViewModel : ViewModelBase
             var currentUtil = _appState?.FiveHour?.Utilization ?? 0;
             var slopeRate = _appState?.FiveHourSlopeRate ?? 0;
 
-            if (currentUtil > 0 && slopeRate > 0.3) // Rising or Steep
+            if (currentUtil > 0 && slopeRate > 0.3)
             {
                 var remainingPercent = 100.0 - currentUtil;
                 var pointsToExhaustion = (int)(remainingPercent / slopeRate);
@@ -278,39 +363,32 @@ public sealed class AnalyticsViewModel : ViewModelBase
                 if (projectionPoints > 1)
                 {
                     var projectionValues = new List<double>();
-                    // Pad with NaN up to current position
                     for (int i = 0; i < _sparklineData.Count; i++)
                         projectionValues.Add(double.NaN);
-                    // Then project forward
                     for (int i = 0; i < projectionPoints; i++)
                     {
                         var projected = currentUtil + (slopeRate * (i + 1));
                         projectionValues.Add(Math.Min(100, projected));
                     }
-
                     _projectionSeries.Values = projectionValues.ToArray();
                     seriesList.Add(_projectionSeries);
+                    hasProjection = true;
                 }
             }
         }
 
-        AnalyticsSeries = seriesList.ToArray();
+        // Only replace the series array when structure changes (avoids chart reset)
+        var seriesKey = $"{SelectedTimeRange}|{_showFiveHour}|{_showSevenDay}|{hasProjection}|{seriesList.Count}";
+        if (seriesKey != _lastSeriesKey)
+        {
+            _lastSeriesKey = seriesKey;
+            AnalyticsSeries = seriesList.ToArray();
+        }
 
-        // Update X axes based on time range and data count
+        // Update X axis labels in-place (no new Axis object)
         var labelCount = SelectedTimeRange == "24h" ? _sparklineData.Count
             : (_sparklineData.Count > 0 ? AggregateToBarData(_sparklineData, SelectedTimeRange).Length : 0);
-        var xLabels = GenerateTimeLabels(labelCount, SelectedTimeRange);
-        AnalyticsXAxes = new Axis[]
-        {
-            new Axis
-            {
-                Labels = xLabels,
-                TextSize = 9,
-                LabelsPaint = new SolidColorPaint(SKColor.Parse("#6B7A8D")),
-                ShowSeparatorLines = false,
-                LabelsRotation = 0,
-            }
-        };
+        _xAxis.Labels = GenerateTimeLabels(labelCount, SelectedTimeRange);
     }
 
     private static double[] AggregateToBarData(IReadOnlyList<double> data, string timeRange)
@@ -335,27 +413,8 @@ public sealed class AnalyticsViewModel : ViewModelBase
         return result;
     }
 
-    public Axis[] AnalyticsXAxes
-    {
-        get => _analyticsXAxesStored;
-        private set => this.RaiseAndSetIfChanged(ref _analyticsXAxesStored, value);
-    }
-
-    public Axis[] AnalyticsYAxes => new Axis[]
-    {
-        new Axis
-        {
-            Name = "Utilization %",
-            NamePaint = new SolidColorPaint(SKColor.Parse("#8FA0B8")),
-            NameTextSize = 11,
-            ShowSeparatorLines = true,
-            SeparatorsPaint = new SolidColorPaint(SKColor.Parse("#202A38")) { StrokeThickness = 1 },
-            LabelsPaint = new SolidColorPaint(SKColor.Parse("#6B7A8D")),
-            TextSize = 10,
-            MinLimit = 0,
-            MaxLimit = 100,
-        }
-    };
+    public Axis[] AnalyticsXAxes { get; }
+    public Axis[] AnalyticsYAxes { get; }
 
     private static string[]? GenerateTimeLabels(int dataPointCount, string timeRange)
     {
@@ -380,15 +439,20 @@ public sealed class AnalyticsViewModel : ViewModelBase
 
             if (totalHours <= 24)
             {
-                labels[i] = (i % 4 == 0) ? pointTime.ToString("h tt") : "";
+                // Show every 2nd point for denser time labels (every ~2 hours)
+                labels[i] = (i % 2 == 0) ? pointTime.ToString("h tt") : "";
             }
             else if (totalHours <= 168)
             {
-                labels[i] = (i % Math.Max(1, dataPointCount / 7) == 0) ? pointTime.ToString("ddd") : "";
+                // Every day label + time for better granularity
+                var step = Math.Max(1, dataPointCount / 14);
+                labels[i] = (i % step == 0) ? pointTime.ToString("ddd h tt") : "";
             }
             else
             {
-                labels[i] = (i % Math.Max(1, dataPointCount / 6) == 0) ? pointTime.ToString("MMM d") : "";
+                // More date labels for 30d+
+                var step = Math.Max(1, dataPointCount / 10);
+                labels[i] = (i % step == 0) ? pointTime.ToString("MMM d") : "";
             }
         }
 
@@ -629,26 +693,36 @@ public sealed class AnalyticsViewModel : ViewModelBase
         private set => this.RaiseAndSetIfChanged(ref _showCycleComparison, value);
     }
 
-    private ISeries[] _cycleSeries = Array.Empty<ISeries>();
-    public ISeries[] CycleSeries
+    // Stable cycle chart objects
+    private readonly ColumnSeries<double> _cycleBarSeries = new()
     {
-        get => _cycleSeries;
-        private set => this.RaiseAndSetIfChanged(ref _cycleSeries, value);
-    }
+        Name = "Avg utilization",
+        Fill = new SolidColorPaint(SKColor.Parse("#66B866")),
+        MaxBarWidth = 32,
+        Padding = 12,
+        DataLabelsPaint = new SolidColorPaint(SKColor.Parse("#F5F7FB")),
+        DataLabelsSize = 10,
+        DataLabelsPosition = LiveChartsCore.Measure.DataLabelsPosition.Top,
+        DataLabelsFormatter = point => $"{point.Model:F0}%",
+    };
+    private readonly Axis _cycleXAxis = new()
+    {
+        Labels = Array.Empty<string>(),
+        TextSize = 10,
+        LabelsPaint = new SolidColorPaint(SKColor.Parse("#6B7A8D")),
+        ShowSeparatorLines = false,
+    };
+    private readonly Axis _cycleYAxis = new()
+    {
+        MinLimit = 0,
+        MaxLimit = 100,
+        ShowSeparatorLines = false,
+        IsVisible = false,
+    };
 
-    private Axis[] _cycleXAxes = Array.Empty<Axis>();
-    public Axis[] CycleXAxes
-    {
-        get => _cycleXAxes;
-        private set => this.RaiseAndSetIfChanged(ref _cycleXAxes, value);
-    }
-
-    private Axis[] _cycleYAxes = Array.Empty<Axis>();
-    public Axis[] CycleYAxes
-    {
-        get => _cycleYAxes;
-        private set => this.RaiseAndSetIfChanged(ref _cycleYAxes, value);
-    }
+    public ISeries[] CycleSeries { get; }
+    public Axis[] CycleXAxes { get; }
+    public Axis[] CycleYAxes { get; }
 
     private void RefreshCycleChart()
     {
@@ -659,7 +733,6 @@ public sealed class AnalyticsViewModel : ViewModelBase
             return;
         }
 
-        // If we have sparkline data, create a simple breakdown into thirds
         if (_sparklineData.Count < 3)
         {
             ShowCycleComparison = false;
@@ -671,49 +744,20 @@ public sealed class AnalyticsViewModel : ViewModelBase
         var period2Avg = _sparklineData.Skip(third).Take(third).Average();
         var period3Avg = _sparklineData.Skip(third * 2).Average();
 
-        var labels = new[] { "Earlier", "Recent", "Now" };
+        // Generate date-range labels for each third
+        var totalDays = SelectedTimeRange == "30d" ? 30 : 90;
+        var thirdDays = totalDays / 3;
+        var now = DateTime.Now;
+        var label1 = $"{now.AddDays(-totalDays):MMM d}-{now.AddDays(-totalDays + thirdDays):MMM d}";
+        var label2 = $"{now.AddDays(-totalDays + thirdDays):MMM d}-{now.AddDays(-thirdDays):MMM d}";
+        var label3 = $"{now.AddDays(-thirdDays):MMM d}-Today";
+
+        _cycleXAxis.Labels = new[] { label1, label2, label3 };
         var values = new[] { period1Avg, period2Avg, period3Avg };
         _cycleData = new List<double>(values);
-
-        CycleSeries = new ISeries[]
-        {
-            new ColumnSeries<double>
-            {
-                Values = values,
-                Name = "Utilization",
-                Fill = new SolidColorPaint(SKColor.Parse("#66B866")),
-                MaxBarWidth = 24,
-                Padding = 8,
-            }
-        };
-
-        CycleXAxes = new Axis[]
-        {
-            new Axis
-            {
-                Labels = labels,
-                TextSize = 10,
-                LabelsPaint = new SolidColorPaint(SKColor.Parse("#6B7A8D")),
-                ShowSeparatorLines = false,
-            }
-        };
-
-        CycleYAxes = new Axis[]
-        {
-            new Axis
-            {
-                MinLimit = 0,
-                MaxLimit = 100,
-                ShowSeparatorLines = false,
-                IsVisible = false,
-            }
-        };
+        _cycleBarSeries.Values = values;
 
         ShowCycleComparison = true;
-        this.RaisePropertyChanged(nameof(ShowCycleComparison));
-        this.RaisePropertyChanged(nameof(CycleSeries));
-        this.RaisePropertyChanged(nameof(CycleXAxes));
-        this.RaisePropertyChanged(nameof(CycleYAxes));
     }
 
     // ========== Feature 4: Tier Recommendation Card ==========

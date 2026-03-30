@@ -25,56 +25,150 @@ public sealed class DatabaseManager : IAsyncDisposable
         _connectionString = $"Data Source={databasePath}";
     }
 
+    private const int CurrentSchemaVersion = 2;
+
     public async Task InitializeAsync()
     {
         _connection = new SqliteConnection(_connectionString);
         await _connection.OpenAsync();
 
+        // Create schema version tracking
         await ExecuteNonQueryAsync("""
-            CREATE TABLE IF NOT EXISTS usage_polls (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                five_hour_utilization REAL NOT NULL,
-                five_hour_resets_at TEXT,
-                seven_day_utilization REAL,
-                seven_day_resets_at TEXT
+            CREATE TABLE IF NOT EXISTS schema_version (
+                version INTEGER NOT NULL
             );
-
-            CREATE TABLE IF NOT EXISTS usage_rollups (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                period_start TEXT NOT NULL,
-                period_end TEXT NOT NULL,
-                resolution TEXT NOT NULL,
-                avg_five_hour_utilization REAL NOT NULL,
-                max_five_hour_utilization REAL NOT NULL,
-                min_five_hour_utilization REAL NOT NULL,
-                avg_seven_day_utilization REAL,
-                max_seven_day_utilization REAL,
-                min_seven_day_utilization REAL,
-                sample_count INTEGER NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS reset_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                timestamp TEXT NOT NULL,
-                window_type TEXT NOT NULL,
-                utilization_before REAL NOT NULL,
-                utilization_after REAL NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS outages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                started_at TEXT NOT NULL,
-                ended_at TEXT,
-                duration_seconds REAL,
-                error_type TEXT
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_usage_polls_timestamp ON usage_polls(timestamp);
-            CREATE INDEX IF NOT EXISTS idx_usage_rollups_period ON usage_rollups(period_start, resolution);
-            CREATE INDEX IF NOT EXISTS idx_reset_events_timestamp ON reset_events(timestamp);
-            CREATE INDEX IF NOT EXISTS idx_outages_started ON outages(started_at);
             """);
+
+        var version = await GetSchemaVersionAsync();
+
+        if (version == 0)
+        {
+            // Fresh install or legacy DB without versioning — create all tables
+            await ExecuteNonQueryAsync("""
+                CREATE TABLE IF NOT EXISTS usage_polls (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    five_hour_utilization REAL NOT NULL,
+                    five_hour_resets_at TEXT,
+                    seven_day_utilization REAL,
+                    seven_day_resets_at TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS usage_rollups (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    period_start TEXT NOT NULL,
+                    period_end TEXT NOT NULL,
+                    resolution TEXT NOT NULL,
+                    avg_five_hour_utilization REAL NOT NULL,
+                    max_five_hour_utilization REAL NOT NULL,
+                    min_five_hour_utilization REAL NOT NULL,
+                    avg_seven_day_utilization REAL,
+                    max_seven_day_utilization REAL,
+                    min_seven_day_utilization REAL,
+                    sample_count INTEGER NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS reset_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    window_type TEXT NOT NULL,
+                    utilization_before REAL NOT NULL,
+                    utilization_after REAL NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS outages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at TEXT NOT NULL,
+                    ended_at TEXT,
+                    duration_seconds REAL,
+                    error_type TEXT
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_usage_polls_timestamp ON usage_polls(timestamp);
+                CREATE INDEX IF NOT EXISTS idx_usage_rollups_period ON usage_rollups(period_start, resolution);
+                CREATE INDEX IF NOT EXISTS idx_reset_events_timestamp ON reset_events(timestamp);
+                CREATE INDEX IF NOT EXISTS idx_outages_started ON outages(started_at);
+                """);
+
+            await SetSchemaVersionAsync(1);
+            version = 1;
+        }
+
+        // Migration v1 → v2: add account_id column to usage_polls for multi-account data separation
+        if (version < 2)
+        {
+            await MigrateV1ToV2Async();
+            version = 2;
+        }
+
+        // Future migrations go here: if (version < 3) { ... }
+    }
+
+    private async Task<int> GetSchemaVersionAsync()
+    {
+        try
+        {
+            await using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "SELECT MAX(version) FROM schema_version;";
+            var result = await cmd.ExecuteScalarAsync();
+            return result is DBNull or null ? 0 : Convert.ToInt32(result);
+        }
+        catch
+        {
+            return 0; // table doesn't exist yet
+        }
+    }
+
+    private async Task SetSchemaVersionAsync(int version)
+    {
+        await ExecuteNonQueryAsync("DELETE FROM schema_version;");
+        await using var cmd = _connection!.CreateCommand();
+        cmd.CommandText = "INSERT INTO schema_version (version) VALUES (@v);";
+        cmd.Parameters.AddWithValue("@v", version);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    /// <summary>
+    /// Migration v1 → v2: Adds account_id to usage_polls so data persists across re-auth.
+    /// Existing data gets a default account_id if one exists.
+    /// </summary>
+    private async Task MigrateV1ToV2Async()
+    {
+        // Check if column already exists (idempotent)
+        var hasColumn = false;
+        try
+        {
+            await using var pragma = _connection!.CreateCommand();
+            pragma.CommandText = "SELECT account_id FROM usage_polls LIMIT 0;";
+            await pragma.ExecuteNonQueryAsync();
+            hasColumn = true;
+        }
+        catch { /* column doesn't exist */ }
+
+        if (!hasColumn)
+        {
+            await ExecuteNonQueryAsync("ALTER TABLE usage_polls ADD COLUMN account_id TEXT;");
+
+            // Backfill: assign existing data to the first account file found
+            var appDataDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "CCStats");
+            if (Directory.Exists(appDataDir))
+            {
+                var accountFile = Directory.GetFiles(appDataDir, "account_*.dat").FirstOrDefault();
+                if (accountFile is not null)
+                {
+                    var accountId = Path.GetFileNameWithoutExtension(accountFile).Replace("account_", "");
+                    await using var cmd = _connection!.CreateCommand();
+                    cmd.CommandText = "UPDATE usage_polls SET account_id = @id WHERE account_id IS NULL;";
+                    cmd.Parameters.AddWithValue("@id", accountId);
+                    var updated = await cmd.ExecuteNonQueryAsync();
+                    System.Diagnostics.Debug.WriteLine($"[DB] Migration v1→v2: assigned {updated} polls to account {accountId}");
+                }
+            }
+        }
+
+        await SetSchemaVersionAsync(2);
+        System.Diagnostics.Debug.WriteLine("[DB] Schema migrated to v2");
     }
 
     public async Task<long> InsertPollAsync(UsagePoll poll)
@@ -85,8 +179,8 @@ public sealed class DatabaseManager : IAsyncDisposable
         {
             await using var cmd = _connection!.CreateCommand();
             cmd.CommandText = """
-                INSERT INTO usage_polls (timestamp, five_hour_utilization, five_hour_resets_at, seven_day_utilization, seven_day_resets_at)
-                VALUES (@timestamp, @fiveHour, @fiveHourResets, @sevenDay, @sevenDayResets);
+                INSERT INTO usage_polls (timestamp, five_hour_utilization, five_hour_resets_at, seven_day_utilization, seven_day_resets_at, account_id)
+                VALUES (@timestamp, @fiveHour, @fiveHourResets, @sevenDay, @sevenDayResets, @accountId);
                 SELECT last_insert_rowid();
                 """;
 
@@ -95,6 +189,7 @@ public sealed class DatabaseManager : IAsyncDisposable
             cmd.Parameters.AddWithValue("@fiveHourResets", poll.FiveHourResetsAt?.ToString("O") ?? (object)DBNull.Value);
             cmd.Parameters.AddWithValue("@sevenDay", poll.SevenDayUtilization ?? (object)DBNull.Value);
             cmd.Parameters.AddWithValue("@sevenDayResets", poll.SevenDayResetsAt?.ToString("O") ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@accountId", poll.AccountId ?? (object)DBNull.Value);
 
             var result = await cmd.ExecuteScalarAsync();
             return Convert.ToInt64(result);
@@ -110,7 +205,7 @@ public sealed class DatabaseManager : IAsyncDisposable
         {
             await using var cmd = _connection!.CreateCommand();
             cmd.CommandText = """
-                SELECT id, timestamp, five_hour_utilization, five_hour_resets_at, seven_day_utilization, seven_day_resets_at
+                SELECT id, timestamp, five_hour_utilization, five_hour_resets_at, seven_day_utilization, seven_day_resets_at, account_id
                 FROM usage_polls
                 WHERE timestamp >= @from AND timestamp <= @to
                 ORDER BY timestamp ASC;
@@ -223,6 +318,37 @@ public sealed class DatabaseManager : IAsyncDisposable
         finally { _dbLock.Release(); }
     }
 
+    public async Task<IReadOnlyList<ResetEvent>> QueryResetEventsAsync(DateTimeOffset from, DateTimeOffset to)
+    {
+        EnsureConnected();
+        await _dbLock.WaitAsync();
+        try
+        {
+            await using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = """
+                SELECT timestamp, window_type, utilization_before, utilization_after
+                FROM reset_events
+                WHERE timestamp >= @from AND timestamp <= @to
+                ORDER BY timestamp ASC;
+                """;
+            cmd.Parameters.AddWithValue("@from", from.ToString("O"));
+            cmd.Parameters.AddWithValue("@to", to.ToString("O"));
+
+            var events = new List<ResetEvent>();
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                events.Add(new ResetEvent(
+                    Timestamp: DateTimeOffset.Parse(reader.GetString(0)),
+                    WindowType: reader.GetString(1),
+                    UtilizationBefore: reader.GetDouble(2),
+                    UtilizationAfter: reader.GetDouble(3)));
+            }
+            return events;
+        }
+        finally { _dbLock.Release(); }
+    }
+
     /// <summary>Records the start of an outage.</summary>
     public async Task<long> StartOutageAsync(DateTimeOffset startedAt, string errorType)
     {
@@ -325,7 +451,8 @@ public sealed class DatabaseManager : IAsyncDisposable
             FiveHourUtilization: reader.GetDouble(2),
             FiveHourResetsAt: reader.IsDBNull(3) ? null : DateTimeOffset.Parse(reader.GetString(3)),
             SevenDayUtilization: reader.IsDBNull(4) ? null : reader.GetDouble(4),
-            SevenDayResetsAt: reader.IsDBNull(5) ? null : DateTimeOffset.Parse(reader.GetString(5)));
+            SevenDayResetsAt: reader.IsDBNull(5) ? null : DateTimeOffset.Parse(reader.GetString(5)),
+            AccountId: reader.FieldCount > 6 && !reader.IsDBNull(6) ? reader.GetString(6) : null);
     }
 
     private static string GetDefaultDatabasePath()

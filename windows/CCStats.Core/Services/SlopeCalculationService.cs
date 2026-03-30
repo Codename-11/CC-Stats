@@ -5,6 +5,8 @@ namespace CCStats.Core.Services;
 public sealed class SlopeCalculationService
 {
     private static readonly TimeSpan BufferWindow = TimeSpan.FromMinutes(10);
+    private static readonly TimeSpan MinTimeSpan = TimeSpan.FromMinutes(2); // need 2+ min of data
+    private const int MinSamples = 3; // need 3+ samples to avoid noise
 
     // Rate thresholds in percent per minute
     private const double FlatThreshold = 0.3;
@@ -26,18 +28,18 @@ public sealed class SlopeCalculationService
     {
         lock (_lock)
         {
-            if (_samples.Count < 2)
+            if (!HasSufficientData())
             {
                 return SlopeLevel.Flat;
             }
 
-            // Linear regression over the buffer window
             var ratePerMinute = CalculateRatePerMinute();
 
             return ratePerMinute switch
             {
                 >= RisingThreshold => SlopeLevel.Steep,
                 >= FlatThreshold => SlopeLevel.Rising,
+                <= -FlatThreshold => SlopeLevel.Declining,
                 _ => SlopeLevel.Flat,
             };
         }
@@ -47,8 +49,16 @@ public sealed class SlopeCalculationService
     {
         lock (_lock)
         {
-            return _samples.Count < 2 ? 0 : CalculateRatePerMinute();
+            return HasSufficientData() ? CalculateRatePerMinute() : 0;
         }
+    }
+
+    /// <summary>Need at least MinSamples over MinTimeSpan to avoid noisy predictions.</summary>
+    private bool HasSufficientData()
+    {
+        if (_samples.Count < MinSamples) return false;
+        var span = _samples[^1].Timestamp - _samples[0].Timestamp;
+        return span >= MinTimeSpan;
     }
 
     public void Bootstrap(IEnumerable<(double Utilization, DateTimeOffset Timestamp)> historicalSamples)

@@ -68,8 +68,9 @@ public sealed class UpdateCheckService
 
             return null; // Already up to date
         }
-        catch
+        catch (Exception ex)
         {
+            AppLogger.Error("UpdateCheck", "Failed to check for updates", ex);
             return null;
         }
     }
@@ -80,33 +81,23 @@ public sealed class UpdateCheckService
     /// </summary>
     public async Task<string?> DownloadUpdateAsync(string downloadUrl, CancellationToken cancellationToken = default)
     {
+        var tempPath = Path.Combine(Path.GetTempPath(), $"CCStats-update-{Guid.NewGuid():N}.exe");
         try
         {
-            // Find the .exe asset URL from the release
-            var response = await _httpClient.GetAsync(GitHubReleasesUrl, cancellationToken);
-            if (!response.IsSuccessStatusCode) return null;
-
-            var json = await response.Content.ReadAsStringAsync(cancellationToken);
-            var release = JsonSerializer.Deserialize<GitHubRelease>(json, new JsonSerializerOptions
-            {
-                PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
-                PropertyNameCaseInsensitive = true,
-            });
-
-            // Find the .exe asset
-            var exeAsset = release?.Assets?.FirstOrDefault(a =>
-                a.BrowserDownloadUrl?.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) == true);
-            if (exeAsset?.BrowserDownloadUrl is null) return null;
-
-            // Download to temp
-            var tempPath = Path.Combine(Path.GetTempPath(), $"CCStats-update-{release!.TagName}.exe");
-            var bytes = await _httpClient.GetByteArrayAsync(exeAsset.BrowserDownloadUrl, cancellationToken);
+            // Use the provided download URL directly instead of re-fetching the release
+            var bytes = await _httpClient.GetByteArrayAsync(downloadUrl, cancellationToken);
             await File.WriteAllBytesAsync(tempPath, bytes, cancellationToken);
 
             return tempPath;
         }
-        catch
+        catch (Exception ex)
         {
+            AppLogger.Error("UpdateCheck", "Failed to download update", ex);
+
+            // Clean up temp file on failure
+            try { if (File.Exists(tempPath)) File.Delete(tempPath); }
+            catch { /* best effort cleanup */ }
+
             return null;
         }
     }
@@ -122,16 +113,36 @@ public sealed class UpdateCheckService
 
         var backupPath = currentExe + ".old";
 
+        // Escape paths for safe use in batch scripts
+        var safeCurrentExe = EscapeBatchString(currentExe);
+        var safeBackupPath = EscapeBatchString(backupPath);
+        var safeDownloadedExe = EscapeBatchString(downloadedExePath);
+
         // Create a batch script to do the swap after we exit
         var script = Path.Combine(Path.GetTempPath(), "ccstats-update.cmd");
         File.WriteAllText(script, $"""
             @echo off
             timeout /t 2 /nobreak >nul
-            del "{backupPath}" 2>nul
-            move "{currentExe}" "{backupPath}"
-            copy "{downloadedExePath}" "{currentExe}"
-            start "" "{currentExe}"
-            del "{downloadedExePath}" 2>nul
+            del "{safeBackupPath}" 2>nul
+            move "{safeCurrentExe}" "{safeBackupPath}"
+            if errorlevel 1 (
+                echo Failed to back up current exe, aborting update.
+                exit /b 1
+            )
+            copy "{safeDownloadedExe}" "{safeCurrentExe}"
+            if errorlevel 1 (
+                echo Copy failed, restoring from backup.
+                move "{safeBackupPath}" "{safeCurrentExe}" 2>nul
+                exit /b 1
+            )
+            start "" "{safeCurrentExe}"
+            if errorlevel 1 (
+                echo Start failed, restoring from backup.
+                del "{safeCurrentExe}" 2>nul
+                move "{safeBackupPath}" "{safeCurrentExe}" 2>nul
+                exit /b 1
+            )
+            del "{safeDownloadedExe}" 2>nul
             del "%~f0"
             """);
 
@@ -157,7 +168,28 @@ public sealed class UpdateCheckService
     private static Version? ParseVersion(string tagName)
     {
         var versionString = tagName.TrimStart('v', 'V');
+
+        // Strip pre-release suffix (e.g., "1.2.3-beta.1" or "1.2.3+build.456")
+        var dashIndex = versionString.IndexOf('-');
+        if (dashIndex >= 0) versionString = versionString[..dashIndex];
+        var plusIndex = versionString.IndexOf('+');
+        if (plusIndex >= 0) versionString = versionString[..plusIndex];
+
         return Version.TryParse(versionString, out var version) ? version : null;
+    }
+
+    /// <summary>
+    /// Escapes special batch script characters to prevent command injection.
+    /// </summary>
+    private static string EscapeBatchString(string value)
+    {
+        return value
+            .Replace("^", "^^")
+            .Replace("&", "^&")
+            .Replace("|", "^|")
+            .Replace("<", "^<")
+            .Replace(">", "^>")
+            .Replace("%", "%%");
     }
 
     private sealed record GitHubRelease

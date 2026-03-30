@@ -12,10 +12,12 @@
         x:DataType="vm:AnalyticsViewModel"
         Title="Usage Analytics"
         Icon="/Assets/avalonia-logo.ico"
-        Width="500"
-        Height="400"
+        Width="520"
+        Height="550"
         MinWidth="400"
         MinHeight="300"
+        MaxHeight="900"
+        CanResize="True"
         SystemDecorations="None"
         Background="Transparent"
         Topmost="False"
@@ -29,229 +31,208 @@
 
     <Border Background="#10141B" CornerRadius="12"
             BorderBrush="#202A38" BorderThickness="1">
-        <Grid RowDefinitions="Auto,*" RowSpacing="0">
+        <Grid RowDefinitions="Auto,*">
 
-            <!-- Drag handle title bar -->
-            <Border Name="AnalyticsDragRegion" Background="Transparent"
+            <!-- Custom title bar -->
+            <Border Name="AnalyticsDragRegion" Background="#10141B"
                     Height="28" CornerRadius="12,12,0,0">
-                <Grid ColumnDefinitions="Auto,*,Auto">
-                    <TextBlock Text="Usage Analytics" FontSize="13" FontWeight="SemiBold"
-                               Foreground="#F5F7FB" Margin="12,0" VerticalAlignment="Center" />
-                    <Border Grid.Column="1" Background="#3A4556"
+                <Panel>
+                    <!-- Drag handle — centered to full window width -->
+                    <Border Background="#3A4556"
                             Width="32" Height="4" CornerRadius="2"
                             HorizontalAlignment="Center" VerticalAlignment="Center" />
-                    <Button Grid.Column="2" Classes="gear" Name="CloseButton"
-                            Margin="0,0,8,0" VerticalAlignment="Center"
+                    <!-- Title left, close right -->
+                    <TextBlock Text="Usage Analytics" FontSize="13" FontWeight="SemiBold"
+                               Foreground="#F5F7FB" Margin="12,0"
+                               VerticalAlignment="Center" HorizontalAlignment="Left" />
+                    <Button Classes="gear" Name="CloseButton"
+                            Margin="0,0,8,0"
+                            VerticalAlignment="Center" HorizontalAlignment="Right"
                             ToolTip.Tip="Close">
                         <TextBlock Text="&#x2715;" FontSize="14" Foreground="#8FA0B8" />
                     </Button>
-                </Grid>
-            </Border>
-
-            <!-- Content -->
-            <Border Grid.Row="1" Margin="12,0,12,12" Padding="16">
-        <Grid RowDefinitions="Auto,*,Auto" RowSpacing="12">
-
-            <!-- Top row: time range selector + series toggles -->
-            <Grid ColumnDefinitions="Auto,*,Auto">
-                <!-- Time range buttons -->
-                <StackPanel Orientation="Horizontal" Spacing="4">
-                    <Button Content="24h"
-                            Command="{Binding SelectTimeRangeCommand}"
-                            CommandParameter="24h"
-                            Foreground="{Binding Tab24hFg}"
-                            Background="{Binding Tab24hBg}"
-                            FontSize="12"
-                            FontWeight="SemiBold"
-                            Padding="10,4"
-                            CornerRadius="4" />
-                    <Button Content="7d"
-                            Command="{Binding SelectTimeRangeCommand}"
-                            CommandParameter="7d"
-                            Foreground="{Binding Tab7dFg}"
-                            Background="{Binding Tab7dBg}"
-                            FontSize="12"
-                            Padding="10,4"
-                            CornerRadius="4" />
-                    <Button Content="30d"
-                            Command="{Binding SelectTimeRangeCommand}"
-                            CommandParameter="30d"
-                            Foreground="{Binding Tab30dFg}"
-                            Background="{Binding Tab30dBg}"
-                            FontSize="12"
-                            Padding="10,4"
-                            CornerRadius="4" />
-                    <Button Content="All"
-                            Command="{Binding SelectTimeRangeCommand}"
-                            CommandParameter="All"
-                            Foreground="{Binding TabAllFg}"
-                            Background="{Binding TabAllBg}"
-                            FontSize="12"
-                            Padding="10,4"
-                            CornerRadius="4" />
-                </StackPanel>
-
-                <!-- Chart key -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10"
-                            HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <StackPanel Orientation="Horizontal" Spacing="3">
-                        <Border Width="12" Height="3" Background="#66B866" CornerRadius="1" VerticalAlignment="Center" />
-                        <TextBlock Text="5h" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="3">
-                        <Border Width="12" Height="1" VerticalAlignment="Center">
-                            <Border.Background>
-                                <SolidColorBrush Color="#4A90D9" />
-                            </Border.Background>
-                        </Border>
-                        <TextBlock Text="7d" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="3">
-                        <Border Width="8" Height="8" Background="#40F39A4B" CornerRadius="1" VerticalAlignment="Center" />
-                        <TextBlock Text="Reset" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center" />
-                    </StackPanel>
-                    <StackPanel Orientation="Horizontal" Spacing="3">
-                        <Border Width="8" Height="8" Background="#14808080" CornerRadius="1" VerticalAlignment="Center" />
-                        <TextBlock Text="Gap" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center" />
-                    </StackPanel>
-                </StackPanel>
-
-                <!-- Series toggles -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12">
-                    <CheckBox Content="5h"
-                              IsChecked="{Binding ShowFiveHour}"
-                              Foreground="#66B866"
-                              FontSize="12" />
-                    <CheckBox Content="7d"
-                              IsChecked="{Binding ShowSevenDay}"
-                              Foreground="#4A90D9"
-                              FontSize="12" />
-                </StackPanel>
-            </Grid>
-
-            <!-- Main chart area -->
-            <Border Grid.Row="1"
-                    Background="#141922"
-                    CornerRadius="8"
-                    BorderBrush="#202A38"
-                    BorderThickness="1"
-                    Padding="12">
-                <Panel>
-                    <!-- LiveCharts2 CartesianChart -->
-                    <lvc:CartesianChart
-                        IsVisible="{Binding HasData}"
-                        Series="{Binding AnalyticsSeries}"
-                        Sections="{Binding ChartSections}"
-                        XAxes="{Binding AnalyticsXAxes}"
-                        YAxes="{Binding AnalyticsYAxes}"
-                        TooltipPosition="Top"
-                        ZoomMode="X" />
-
-                    <!-- Placeholder when no data -->
-                    <StackPanel IsVisible="{Binding !HasData}"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Spacing="8">
-                        <TextBlock Text="Analytics chart"
-                                   FontSize="17"
-                                   FontWeight="SemiBold"
-                                   Foreground="#F5F7FB"
-                                   HorizontalAlignment="Center" />
-                        <TextBlock Text="Coming soon - collecting data"
-                                   FontSize="12"
-                                   Foreground="#6B7A8D"
-                                   HorizontalAlignment="Center" />
-                    </StackPanel>
                 </Panel>
             </Border>
 
-            <!-- Bottom insights area -->
-            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
-                <StackPanel Spacing="0">
+            <!-- Content -->
+            <Grid Grid.Row="1" RowDefinitions="Auto,*,Auto" RowSpacing="8"
+                  Margin="12,0,12,12">
 
-                    <!-- Feature 1: Headroom Breakdown Bar -->
-                    <Border IsVisible="{Binding ShowBreakdown}"
-                            BorderBrush="#202A38" BorderThickness="1" CornerRadius="8"
-                            Padding="12,8" Margin="0,0,0,0">
-                        <StackPanel Spacing="6">
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                                <TextBlock Text="{Binding BreakdownUsedText}" FontSize="12" FontWeight="SemiBold" Foreground="#F5F7FB" />
-                                <TextBlock Text="{Binding BreakdownTotalText}" FontSize="12" Foreground="#6B7A8D" />
-                            </StackPanel>
-                            <ProgressBar Value="{Binding BreakdownUsedPercent}" Maximum="100"
-                                         Height="20" CornerRadius="4"
-                                         Foreground="{Binding BreakdownBarBrush}"
-                                         Background="#15FFFFFF" />
-                            <TextBlock Text="{Binding BreakdownLegend}" FontSize="11" Foreground="#6B7A8D" />
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Insights -->
-                    <StackPanel IsVisible="{Binding HasInsights}" Margin="0,6,0,0" Spacing="2">
-                        <TextBlock Text="{Binding PrimaryInsight}" FontSize="12" Foreground="#F5F7FB" />
-                        <TextBlock Text="{Binding SecondaryInsight}" FontSize="11" Foreground="#6B7A8D"
-                                   IsVisible="{Binding SecondaryInsight, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                <!-- Top row: time range selector + legend + toggles -->
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Button Content="24h"
+                                Command="{Binding SelectTimeRangeCommand}"
+                                CommandParameter="24h"
+                                Foreground="{Binding Tab24hFg}"
+                                Background="{Binding Tab24hBg}"
+                                FontSize="12" FontWeight="SemiBold"
+                                Padding="10,4" CornerRadius="4" />
+                        <Button Content="7d"
+                                Command="{Binding SelectTimeRangeCommand}"
+                                CommandParameter="7d"
+                                Foreground="{Binding Tab7dFg}"
+                                Background="{Binding Tab7dBg}"
+                                FontSize="12" Padding="10,4" CornerRadius="4" />
+                        <Button Content="30d"
+                                Command="{Binding SelectTimeRangeCommand}"
+                                CommandParameter="30d"
+                                Foreground="{Binding Tab30dFg}"
+                                Background="{Binding Tab30dBg}"
+                                FontSize="12" Padding="10,4" CornerRadius="4" />
+                        <Button Content="All"
+                                Command="{Binding SelectTimeRangeCommand}"
+                                CommandParameter="All"
+                                Foreground="{Binding TabAllFg}"
+                                Background="{Binding TabAllBg}"
+                                FontSize="12" Padding="10,4" CornerRadius="4" />
                     </StackPanel>
 
-                    <!-- Feature 3: Cycle-over-Cycle Bar Chart -->
-                    <Border IsVisible="{Binding ShowCycleComparison}"
-                            Background="#141922" CornerRadius="8"
-                            BorderBrush="#202A38" BorderThickness="1"
-                            Padding="8" Margin="0,8,0,0" Height="120">
-                        <lvc:CartesianChart
-                            Series="{Binding CycleSeries}"
-                            XAxes="{Binding CycleXAxes}"
-                            YAxes="{Binding CycleYAxes}"
-                            TooltipPosition="Top" />
-                    </Border>
-
-                    <!-- Feature 2: Pattern Detection Cards -->
-                    <ItemsControl ItemsSource="{Binding PatternCards}" Margin="0,6,0,0">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="#0AFFFFFF" CornerRadius="6" Padding="10,6" Margin="0,2">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <StackPanel Spacing="2">
-                                            <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" Foreground="#F5F7FB" />
-                                            <TextBlock Text="{Binding Summary}" FontSize="11" Foreground="#6B7A8D" TextWrapping="Wrap" />
-                                        </StackPanel>
-                                        <Button Grid.Column="1" Classes="gear" Command="{Binding DismissCommand}"
-                                                VerticalAlignment="Top">
-                                            <TextBlock Text="&#x2715;" FontSize="10" Foreground="#6B7A8D" />
-                                        </Button>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-
-                    <!-- Feature 4: Tier Recommendation Card -->
-                    <Border IsVisible="{Binding ShowTierRecommendation}"
-                            Background="#0AFFFFFF" CornerRadius="6" Padding="10,8" Margin="0,6,0,0">
-                        <StackPanel Spacing="2">
-                            <TextBlock Text="{Binding TierRecommendationTitle}" FontSize="12" FontWeight="SemiBold" Foreground="#E6C15A" />
-                            <TextBlock Text="{Binding TierRecommendationSummary}" FontSize="11" Foreground="#8FA0B8" TextWrapping="Wrap" />
+                    <!-- Chart key -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="3">
+                            <Border Width="12" Height="3" Background="#66B866" CornerRadius="1" VerticalAlignment="Center" />
+                            <TextBlock Text="5h" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center" />
                         </StackPanel>
-                    </Border>
+                        <StackPanel Orientation="Horizontal" Spacing="3">
+                            <Border Width="12" Height="1" VerticalAlignment="Center">
+                                <Border.Background>
+                                    <SolidColorBrush Color="#4A90D9" />
+                                </Border.Background>
+                            </Border>
+                            <TextBlock Text="7d" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="3">
+                            <Border Width="8" Height="8" Background="#60F39A4B" CornerRadius="1" VerticalAlignment="Center" />
+                            <TextBlock Text="5h" FontSize="9" Foreground="#F39A4B" VerticalAlignment="Center"
+                                       ToolTip.Tip="5-hour quota window reset" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="3">
+                            <Border Width="8" Height="8" Background="#604A90D9" CornerRadius="1" VerticalAlignment="Center" />
+                            <TextBlock Text="7d" FontSize="9" Foreground="#4A90D9" VerticalAlignment="Center"
+                                       ToolTip.Tip="7-day quota window reset" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="3">
+                            <Border Width="8" Height="8" Background="#14808080" CornerRadius="1" VerticalAlignment="Center" />
+                            <TextBlock Text="No data" FontSize="9" Foreground="#6B7A8D" VerticalAlignment="Center"
+                                       ToolTip.Tip="No polls recorded during this period" />
+                        </StackPanel>
+                    </StackPanel>
 
-                    <!-- Fallback when no insights available -->
-                    <Border IsVisible="{Binding ShowNoInsightsFallback}"
-                            Background="#141922"
-                            CornerRadius="8"
-                            BorderBrush="#202A38"
-                            BorderThickness="1"
-                            Padding="10">
-                        <TextBlock Text="Insights will appear here once enough data is collected."
-                                   FontSize="11"
-                                   Foreground="#6B7A8D"
-                                   HorizontalAlignment="Center"
-                                   TextAlignment="Center" />
-                    </Border>
+                    <!-- Series toggles -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="12">
+                        <CheckBox Content="5h" IsChecked="{Binding ShowFiveHour}"
+                                  Foreground="#66B866" FontSize="12" />
+                        <CheckBox Content="7d" IsChecked="{Binding ShowSevenDay}"
+                                  Foreground="#4A90D9" FontSize="12" />
+                    </StackPanel>
+                </Grid>
 
-                </StackPanel>
-            </ScrollViewer>
-        </Grid>
-            </Border>
+                <!-- Main chart area -->
+                <Border Grid.Row="1"
+                        Background="#141922" CornerRadius="8"
+                        BorderBrush="#202A38" BorderThickness="1"
+                        Padding="12" MinHeight="180">
+                    <Panel>
+                        <lvc:CartesianChart
+                            IsVisible="{Binding HasData}"
+                            Series="{Binding AnalyticsSeries}"
+                            Sections="{Binding ChartSections}"
+                            XAxes="{Binding AnalyticsXAxes}"
+                            YAxes="{Binding AnalyticsYAxes}"
+                            TooltipPosition="Top"
+                            ZoomMode="X" />
+                        <StackPanel IsVisible="{Binding !HasData}"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                            <TextBlock Text="Collecting data..." FontSize="14" Foreground="#6B7A8D"
+                                       HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Panel>
+                </Border>
+
+                <!-- Bottom insights area -->
+                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" MaxHeight="250">
+                    <StackPanel Spacing="0">
+
+                        <!-- Headroom Breakdown Bar -->
+                        <Border IsVisible="{Binding ShowBreakdown}"
+                                BorderBrush="#202A38" BorderThickness="1" CornerRadius="8"
+                                Padding="12,8">
+                            <StackPanel Spacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <TextBlock Text="{Binding BreakdownUsedText}" FontSize="12" FontWeight="SemiBold" Foreground="#F5F7FB" />
+                                    <TextBlock Text="{Binding BreakdownTotalText}" FontSize="12" Foreground="#6B7A8D" />
+                                </StackPanel>
+                                <ProgressBar Value="{Binding BreakdownUsedPercent}" Maximum="100"
+                                             Height="20" CornerRadius="4"
+                                             Foreground="{Binding BreakdownBarBrush}"
+                                             Background="#15FFFFFF" />
+                                <TextBlock Text="{Binding BreakdownLegend}" FontSize="11" Foreground="#6B7A8D" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Insights -->
+                        <StackPanel IsVisible="{Binding HasInsights}" Margin="0,6,0,0" Spacing="2">
+                            <TextBlock Text="{Binding PrimaryInsight}" FontSize="12" Foreground="#F5F7FB" />
+                            <TextBlock Text="{Binding SecondaryInsight}" FontSize="11" Foreground="#6B7A8D"
+                                       IsVisible="{Binding SecondaryInsight, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                        </StackPanel>
+
+                        <!-- Cycle-over-Cycle Bar Chart -->
+                        <Border IsVisible="{Binding ShowCycleComparison}"
+                                Background="#141922" CornerRadius="8"
+                                BorderBrush="#202A38" BorderThickness="1"
+                                Padding="8" Margin="0,8,0,0" Height="120">
+                            <lvc:CartesianChart
+                                Series="{Binding CycleSeries}"
+                                XAxes="{Binding CycleXAxes}"
+                                YAxes="{Binding CycleYAxes}"
+                                TooltipPosition="Top" />
+                        </Border>
+
+                        <!-- Pattern Detection Cards -->
+                        <ItemsControl ItemsSource="{Binding PatternCards}" Margin="0,6,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#0AFFFFFF" CornerRadius="6" Padding="10,6" Margin="0,2">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <StackPanel Spacing="2">
+                                                <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" Foreground="#F5F7FB" />
+                                                <TextBlock Text="{Binding Summary}" FontSize="11" Foreground="#6B7A8D" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Classes="gear" Command="{Binding DismissCommand}"
+                                                    VerticalAlignment="Top">
+                                                <TextBlock Text="&#x2715;" FontSize="10" Foreground="#6B7A8D" />
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Tier Recommendation Card -->
+                        <Border IsVisible="{Binding ShowTierRecommendation}"
+                                Background="#0AFFFFFF" CornerRadius="6" Padding="10,8" Margin="0,6,0,0">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="{Binding TierRecommendationTitle}" FontSize="12" FontWeight="SemiBold" Foreground="#E6C15A" />
+                                <TextBlock Text="{Binding TierRecommendationSummary}" FontSize="11" Foreground="#8FA0B8" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Fallback -->
+                        <Border IsVisible="{Binding ShowNoInsightsFallback}"
+                                Background="#141922" CornerRadius="8"
+                                BorderBrush="#202A38" BorderThickness="1"
+                                Padding="10">
+                            <TextBlock Text="Insights will appear here once enough data is collected."
+                                       FontSize="11" Foreground="#6B7A8D"
+                                       HorizontalAlignment="Center" TextAlignment="Center" />
+                        </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
         </Grid>
     </Border>
 </Window>

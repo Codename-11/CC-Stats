@@ -9,6 +9,9 @@ namespace CCStats.Desktop.Views;
 
 public partial class MainWindow : Window
 {
+    private MainWindowViewModel? _lastViewModel;
+    private IDisposable? _boundsSubscription;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -41,7 +44,7 @@ public partial class MainWindow : Window
 
         // Re-snap when window size changes (settings open/close makes it taller/shorter)
         // This keeps the bottom edge anchored above the taskbar.
-        this.GetObservable(BoundsProperty).Subscribe(_ =>
+        _boundsSubscription = this.GetObservable(BoundsProperty).Subscribe(_ =>
         {
             if (DataContext is MainWindowViewModel vm && vm.IsDocked && Bounds.Height > 10)
             {
@@ -52,17 +55,29 @@ public partial class MainWindow : Window
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
+        // Unsubscribe from previous ViewModel to prevent event handler leaks
+        if (_lastViewModel is not null)
+        {
+            _lastViewModel.DockStateChanged -= OnDockStateChanged;
+            _lastViewModel.InlineAnalyticsChanged -= OnInlineAnalyticsChanged;
+            _lastViewModel.CopyStatusRequested -= OnCopyStatusRequested;
+            _lastViewModel = null;
+        }
+
         if (DataContext is MainWindowViewModel vm)
         {
             vm.DockStateChanged += OnDockStateChanged;
             vm.InlineAnalyticsChanged += OnInlineAnalyticsChanged;
-            vm.CopyStatusRequested += async (_, text) =>
-            {
-                if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
-                {
-                    await clipboard.SetTextAsync(text);
-                }
-            };
+            vm.CopyStatusRequested += OnCopyStatusRequested;
+            _lastViewModel = vm;
+        }
+    }
+
+    private async void OnCopyStatusRequested(object? sender, string text)
+    {
+        if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
+        {
+            await clipboard.SetTextAsync(text);
         }
     }
 
@@ -105,8 +120,8 @@ public partial class MainWindow : Window
         var winHeight = (int)(Bounds.Height * scaling);
         if (winHeight < 10) winHeight = (int)(420 * scaling); // fallback before layout
 
-        var x = workArea.Right - winWidth - gap;
-        var y = workArea.Bottom - winHeight - gap;
+        var x = Math.Max(workArea.X, workArea.Right - winWidth - gap);
+        var y = Math.Max(workArea.Y, workArea.Bottom - winHeight - gap);
 
         Position = new PixelPoint(x, y);
     }
@@ -121,6 +136,22 @@ public partial class MainWindow : Window
             BeginMoveDrag(e);
             e.Handled = true;
         }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _boundsSubscription?.Dispose();
+        _boundsSubscription = null;
+
+        if (_lastViewModel is not null)
+        {
+            _lastViewModel.DockStateChanged -= OnDockStateChanged;
+            _lastViewModel.InlineAnalyticsChanged -= OnInlineAnalyticsChanged;
+            _lastViewModel.CopyStatusRequested -= OnCopyStatusRequested;
+            _lastViewModel = null;
+        }
+
+        base.OnClosed(e);
     }
 
     protected override void OnKeyDown(KeyEventArgs e)

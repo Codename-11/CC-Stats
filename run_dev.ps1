@@ -10,6 +10,9 @@ if (-not (Test-Path $projectPath)) { throw "Project not found at '$projectPath'"
 # Kill stale instances
 Get-Process -Name "CCStats" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
+# Clean stale XAML artifacts to prevent runtime precompilation errors
+& $dotnet build $projectPath --verbosity quiet 2>&1 | Out-Null
+
 Write-Host "Starting CC-Stats... (Ctrl+C to stop)" -ForegroundColor Cyan
 Write-Host "Logs will appear below." -ForegroundColor DarkGray
 Write-Host "---"

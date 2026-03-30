@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
+using System.Linq;
 using System.Reactive;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
@@ -30,22 +31,65 @@ public sealed class AccountActiveColorConverter : IValueConverter
 public sealed class AccountItemViewModel : ViewModelBase
 {
     private string _displayName = "";
+    private string _editingName = "";
+    private bool _isEditing;
+    private bool _isDirty;
 
     public string AccountId { get; init; } = "";
 
-    /// <summary>Fires when the display name is changed by the user.</summary>
+    /// <summary>Fires when the user explicitly saves a new name.</summary>
     public event EventHandler<string>? NameChanged;
 
     public string DisplayName
     {
         get => _displayName;
+        set => this.RaiseAndSetIfChanged(ref _displayName, value);
+    }
+
+    public string EditingName
+    {
+        get => _editingName;
         set
         {
-            if (this.RaiseAndSetIfChanged(ref _displayName, value) is not null)
-            {
-                NameChanged?.Invoke(this, value);
-            }
+            this.RaiseAndSetIfChanged(ref _editingName, value);
+            IsDirty = _editingName.Trim() != _displayName;
         }
+    }
+
+    public bool IsEditing
+    {
+        get => _isEditing;
+        set => this.RaiseAndSetIfChanged(ref _isEditing, value);
+    }
+
+    public bool IsDirty
+    {
+        get => _isDirty;
+        set => this.RaiseAndSetIfChanged(ref _isDirty, value);
+    }
+
+    public void StartEditing()
+    {
+        EditingName = DisplayName;
+        IsEditing = true;
+        IsDirty = false;
+    }
+
+    public void CancelEditing()
+    {
+        IsEditing = false;
+        IsDirty = false;
+    }
+
+    public bool SaveName()
+    {
+        var trimmed = EditingName.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed)) return false;
+        DisplayName = trimmed;
+        IsEditing = false;
+        IsDirty = false;
+        NameChanged?.Invoke(this, trimmed);
+        return true;
     }
 
     public string TierLabel { get; init; } = "";
@@ -110,6 +154,9 @@ public sealed class SettingsViewModel : ViewModelBase
         PruneDatabaseCommand = ReactiveCommand.Create(OnPruneDatabase);
         SwitchAccountCommand = ReactiveCommand.Create<string>(OnSwitchAccount);
         RemoveAccountCommand = ReactiveCommand.Create<string>(OnRemoveAccount);
+        EditAccountNameCommand = ReactiveCommand.Create<string>(OnEditAccountName);
+        SaveAccountNameCommand = ReactiveCommand.Create<string>(OnSaveAccountName);
+        CancelEditCommand = ReactiveCommand.Create<string>(OnCancelEdit);
         ResetToDefaultsCommand = ReactiveCommand.Create(OnResetToDefaults);
         TestNotificationCommand = ReactiveCommand.Create(() => TestNotificationRequested?.Invoke(this, EventArgs.Empty));
         OpenPromoClockCommand = ReactiveCommand.Create(() =>
@@ -288,6 +335,12 @@ public sealed class SettingsViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> PruneDatabaseCommand { get; }
     public ReactiveCommand<string, Unit> SwitchAccountCommand { get; }
     public ReactiveCommand<string, Unit> RemoveAccountCommand { get; }
+    public ReactiveCommand<string, Unit> EditAccountNameCommand { get; }
+    public ReactiveCommand<string, Unit> SaveAccountNameCommand { get; }
+    public ReactiveCommand<string, Unit> CancelEditCommand { get; }
+
+    /// <summary>Fires when account name is saved, with (accountId, newName).</summary>
+    public event EventHandler<(string AccountId, string NewName)>? AccountNameSaved;
     public ReactiveCommand<Unit, Unit> ResetToDefaultsCommand { get; }
 
     private void OnClearDatabase()
@@ -322,6 +375,27 @@ public sealed class SettingsViewModel : ViewModelBase
     private void OnRemoveAccount(string accountId)
     {
         AccountRemoveRequested?.Invoke(this, accountId);
+    }
+
+    private void OnEditAccountName(string accountId)
+    {
+        var account = Accounts.FirstOrDefault(a => a.AccountId == accountId);
+        account?.StartEditing();
+    }
+
+    private void OnSaveAccountName(string accountId)
+    {
+        var account = Accounts.FirstOrDefault(a => a.AccountId == accountId);
+        if (account is not null && account.SaveName())
+        {
+            AccountNameSaved?.Invoke(this, (accountId, account.DisplayName));
+        }
+    }
+
+    private void OnCancelEdit(string accountId)
+    {
+        var account = Accounts.FirstOrDefault(a => a.AccountId == accountId);
+        account?.CancelEditing();
     }
 
     private void OnResetToDefaults()

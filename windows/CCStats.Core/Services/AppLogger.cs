@@ -31,7 +31,7 @@ public static class AppLogger
     public static void Error(string tag, string message, Exception? ex = null)
     {
         var line = ex is not null
-            ? $"[{tag}] ERROR: {message} — {ex.GetType().Name}: {ex.Message}"
+            ? $"[{tag}] ERROR: {message} -- {ex.GetType().Name}: {ex.Message}"
             : $"[{tag}] ERROR: {message}";
         Debug.WriteLine(line);
         if (_consoleEnabled)

@@ -6,4 +6,5 @@ public record UsagePoll(
     double FiveHourUtilization,
     DateTimeOffset? FiveHourResetsAt,
     double? SevenDayUtilization,
-    DateTimeOffset? SevenDayResetsAt);
+    DateTimeOffset? SevenDayResetsAt,
+    string? AccountId = null);

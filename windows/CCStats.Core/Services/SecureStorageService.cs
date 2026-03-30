@@ -36,7 +36,17 @@ public sealed class SecureStorageService
             var json = JsonSerializer.Serialize(credentials);
             var plainBytes = Encoding.UTF8.GetBytes(json);
             var encryptedBytes = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
-            File.WriteAllBytes(_filePath, encryptedBytes);
+            var tempPath = _filePath + ".tmp";
+            try
+            {
+                File.WriteAllBytes(tempPath, encryptedBytes);
+                File.Move(tempPath, _filePath, overwrite: true);
+            }
+            catch
+            {
+                try { File.Delete(tempPath); } catch { }
+                throw;
+            }
         }
     }
 
@@ -49,17 +59,33 @@ public sealed class SecureStorageService
                 return null;
             }
 
+            byte[]? plainBytes = null;
             try
             {
                 var encryptedBytes = File.ReadAllBytes(_filePath);
-                var plainBytes = ProtectedData.Unprotect(encryptedBytes, null, DataProtectionScope.CurrentUser);
+                plainBytes = ProtectedData.Unprotect(encryptedBytes, null, DataProtectionScope.CurrentUser);
                 var json = Encoding.UTF8.GetString(plainBytes);
                 return JsonSerializer.Deserialize<StoredCredentials>(json);
             }
+            catch (CryptographicException ex)
+            {
+                AppLogger.Error("SecureStorage", "Failed to decrypt credentials (data may be corrupt or from another user)", ex);
+                return null;
+            }
+            catch (JsonException ex)
+            {
+                AppLogger.Error("SecureStorage", "Failed to deserialize credentials JSON", ex);
+                return null;
+            }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SecureStorage] Failed to load credentials: {ex.Message}");
+                AppLogger.Error("SecureStorage", "Failed to load credentials", ex);
                 return null;
+            }
+            finally
+            {
+                if (plainBytes is not null)
+                    Array.Clear(plainBytes, 0, plainBytes.Length);
             }
         }
     }
@@ -80,51 +106,89 @@ public sealed class SecureStorageService
     /// <summary>Lists all stored account IDs.</summary>
     public IReadOnlyList<string> ListAccounts()
     {
-        var dir = Path.GetDirectoryName(_filePath)!;
-        if (!Directory.Exists(dir)) return Array.Empty<string>();
+        lock (_ioLock)
+        {
+            var dir = Path.GetDirectoryName(_filePath)!;
+            if (!Directory.Exists(dir)) return Array.Empty<string>();
 
-        return Directory.GetFiles(dir, "account_*.dat")
-            .Select(f => Path.GetFileNameWithoutExtension(f)!.Replace("account_", ""))
-            .ToList();
+            return Directory.GetFiles(dir, "account_*.dat")
+                .Select(f => Path.GetFileNameWithoutExtension(f)!.Replace("account_", ""))
+                .ToList();
+        }
     }
 
     /// <summary>Saves credentials for a specific account.</summary>
     public void SaveAccountCredentials(string accountId, StoredCredentials credentials)
     {
-        var path = GetAccountFilePath(accountId);
-        var directory = Path.GetDirectoryName(path);
-        if (directory is not null) Directory.CreateDirectory(directory);
+        lock (_ioLock)
+        {
+            var path = GetAccountFilePath(accountId);
+            var directory = Path.GetDirectoryName(path);
+            if (directory is not null) Directory.CreateDirectory(directory);
 
-        var json = JsonSerializer.Serialize(credentials);
-        var plainBytes = Encoding.UTF8.GetBytes(json);
-        var encryptedBytes = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
-        File.WriteAllBytes(path, encryptedBytes);
+            var json = JsonSerializer.Serialize(credentials);
+            var plainBytes = Encoding.UTF8.GetBytes(json);
+            var encryptedBytes = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
+            var tempPath = path + ".tmp";
+            try
+            {
+                File.WriteAllBytes(tempPath, encryptedBytes);
+                File.Move(tempPath, path, overwrite: true);
+            }
+            catch
+            {
+                try { File.Delete(tempPath); } catch { }
+                throw;
+            }
+        }
     }
 
     /// <summary>Loads credentials for a specific account.</summary>
     public StoredCredentials? LoadAccountCredentials(string accountId)
     {
-        var path = GetAccountFilePath(accountId);
-        if (!File.Exists(path)) return null;
-        try
+        lock (_ioLock)
         {
-            var encryptedBytes = File.ReadAllBytes(path);
-            var plainBytes = ProtectedData.Unprotect(encryptedBytes, null, DataProtectionScope.CurrentUser);
-            var json = Encoding.UTF8.GetString(plainBytes);
-            return JsonSerializer.Deserialize<StoredCredentials>(json);
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[SecureStorage] Failed to load account credentials for {accountId}: {ex.Message}");
-            return null;
+            var path = GetAccountFilePath(accountId);
+            if (!File.Exists(path)) return null;
+            byte[]? plainBytes = null;
+            try
+            {
+                var encryptedBytes = File.ReadAllBytes(path);
+                plainBytes = ProtectedData.Unprotect(encryptedBytes, null, DataProtectionScope.CurrentUser);
+                var json = Encoding.UTF8.GetString(plainBytes);
+                return JsonSerializer.Deserialize<StoredCredentials>(json);
+            }
+            catch (CryptographicException ex)
+            {
+                AppLogger.Error("SecureStorage", $"Failed to decrypt account credentials for {accountId} (data may be corrupt or from another user)", ex);
+                return null;
+            }
+            catch (JsonException ex)
+            {
+                AppLogger.Error("SecureStorage", $"Failed to deserialize account credentials JSON for {accountId}", ex);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("SecureStorage", $"Failed to load account credentials for {accountId}", ex);
+                return null;
+            }
+            finally
+            {
+                if (plainBytes is not null)
+                    Array.Clear(plainBytes, 0, plainBytes.Length);
+            }
         }
     }
 
     /// <summary>Removes a specific account's credentials.</summary>
     public void RemoveAccount(string accountId)
     {
-        var path = GetAccountFilePath(accountId);
-        if (File.Exists(path)) File.Delete(path);
+        lock (_ioLock)
+        {
+            var path = GetAccountFilePath(accountId);
+            if (File.Exists(path)) File.Delete(path);
+        }
     }
 
     private string GetAccountFilePath(string accountId)

@@ -16,6 +16,7 @@ public sealed class PreferencesManager
     };
 
     private readonly string _filePath;
+    private readonly object _lock = new();
     private PreferencesData _data = new();
 
     public event EventHandler? PreferencesChanged;
@@ -32,213 +33,224 @@ public sealed class PreferencesManager
 
     public int WarningThreshold
     {
-        get => _data.WarningThreshold;
-        set { _data.WarningThreshold = Math.Clamp(value, 6, 50); Validate(); Save(); }
+        get { lock (_lock) return _data.WarningThreshold; }
+        set { lock (_lock) { _data.WarningThreshold = Math.Clamp(value, 6, 50); Validate(); Save(); } }
     }
 
     public int CriticalThreshold
     {
-        get => _data.CriticalThreshold;
-        set { _data.CriticalThreshold = Math.Clamp(value, 1, 49); Validate(); Save(); }
+        get { lock (_lock) return _data.CriticalThreshold; }
+        set { lock (_lock) { _data.CriticalThreshold = Math.Clamp(value, 1, 49); Validate(); Save(); } }
     }
 
     public int PollIntervalSeconds
     {
-        get => _data.PollIntervalSeconds;
-        set
-        {
-            _data.PollIntervalSeconds = ValidPollIntervals.Contains(value) ? value : 120;
-            Save();
-        }
+        get { lock (_lock) return _data.PollIntervalSeconds; }
+        set { lock (_lock) { _data.PollIntervalSeconds = ValidPollIntervals.Contains(value) ? value : 120; Save(); } }
     }
 
     public int DataRetentionDays
     {
-        get => _data.DataRetentionDays;
-        set
-        {
-            _data.DataRetentionDays = ValidRetentionDays.Contains(value) ? value : 365;
-            Save();
-        }
+        get { lock (_lock) return _data.DataRetentionDays; }
+        set { lock (_lock) { _data.DataRetentionDays = ValidRetentionDays.Contains(value) ? value : 365; Save(); } }
     }
 
     public int? CustomFiveHourCredits
     {
-        get => _data.CustomFiveHourCredits;
-        set { _data.CustomFiveHourCredits = value; Save(); }
+        get { lock (_lock) return _data.CustomFiveHourCredits; }
+        set { lock (_lock) { _data.CustomFiveHourCredits = value; Save(); } }
     }
 
     public int? CustomSevenDayCredits
     {
-        get => _data.CustomSevenDayCredits;
-        set { _data.CustomSevenDayCredits = value; Save(); }
+        get { lock (_lock) return _data.CustomSevenDayCredits; }
+        set { lock (_lock) { _data.CustomSevenDayCredits = value; Save(); } }
     }
 
     public double? CustomMonthlyPrice
     {
-        get => _data.CustomMonthlyPrice;
-        set { _data.CustomMonthlyPrice = value; Save(); }
+        get { lock (_lock) return _data.CustomMonthlyPrice; }
+        set { lock (_lock) { _data.CustomMonthlyPrice = value; Save(); } }
     }
 
     public int BillingCycleDay
     {
-        get => _data.BillingCycleDay;
-        set { _data.BillingCycleDay = Math.Clamp(value, 0, 28); Save(); }
+        get { lock (_lock) return _data.BillingCycleDay; }
+        set { lock (_lock) { _data.BillingCycleDay = Math.Clamp(value, 0, 28); Save(); } }
     }
 
     public bool LaunchAtLogin
     {
-        get => _data.LaunchAtLogin;
-        set { _data.LaunchAtLogin = value; Save(); }
+        get { lock (_lock) return _data.LaunchAtLogin; }
+        set { lock (_lock) { _data.LaunchAtLogin = value; Save(); } }
     }
 
     public bool ApiStatusAlerts
     {
-        get => _data.ApiStatusAlerts;
-        set { _data.ApiStatusAlerts = value; Save(); }
+        get { lock (_lock) return _data.ApiStatusAlerts; }
+        set { lock (_lock) { _data.ApiStatusAlerts = value; Save(); } }
     }
 
     public bool ExtraUsageAlerts
     {
-        get => _data.ExtraUsageAlerts;
-        set { _data.ExtraUsageAlerts = value; Save(); }
+        get { lock (_lock) return _data.ExtraUsageAlerts; }
+        set { lock (_lock) { _data.ExtraUsageAlerts = value; Save(); } }
     }
 
     public bool ExtraUsageAlert50
     {
-        get => _data.ExtraUsageAlert50;
-        set { _data.ExtraUsageAlert50 = value; Save(); }
+        get { lock (_lock) return _data.ExtraUsageAlert50; }
+        set { lock (_lock) { _data.ExtraUsageAlert50 = value; Save(); } }
     }
 
     public bool ExtraUsageAlert75
     {
-        get => _data.ExtraUsageAlert75;
-        set { _data.ExtraUsageAlert75 = value; Save(); }
+        get { lock (_lock) return _data.ExtraUsageAlert75; }
+        set { lock (_lock) { _data.ExtraUsageAlert75 = value; Save(); } }
     }
 
     public bool ExtraUsageAlert90
     {
-        get => _data.ExtraUsageAlert90;
-        set { _data.ExtraUsageAlert90 = value; Save(); }
+        get { lock (_lock) return _data.ExtraUsageAlert90; }
+        set { lock (_lock) { _data.ExtraUsageAlert90 = value; Save(); } }
     }
 
     public bool AdaptivePolling
     {
-        get => _data.AdaptivePolling;
-        set { _data.AdaptivePolling = value; Save(); }
+        get { lock (_lock) return _data.AdaptivePolling; }
+        set { lock (_lock) { _data.AdaptivePolling = value; Save(); } }
     }
 
     public bool HasCompletedOnboarding
     {
-        get => _data.HasCompletedOnboarding;
-        set { _data.HasCompletedOnboarding = value; Save(); }
+        get { lock (_lock) return _data.HasCompletedOnboarding; }
+        set { lock (_lock) { _data.HasCompletedOnboarding = value; Save(); } }
     }
 
     public string? DismissedVersion
     {
-        get => _data.DismissedVersion;
-        set { _data.DismissedVersion = value; Save(); }
+        get { lock (_lock) return _data.DismissedVersion; }
+        set { lock (_lock) { _data.DismissedVersion = value; Save(); } }
     }
 
     public string? LastExtraUsagePeriodKey
     {
-        get => _data.LastExtraUsagePeriodKey;
-        set { _data.LastExtraUsagePeriodKey = value; }
+        get { lock (_lock) return _data.LastExtraUsagePeriodKey; }
+        set { lock (_lock) { _data.LastExtraUsagePeriodKey = value; Save(); } }
     }
 
     public bool ExtraUsage50Fired
     {
-        get => _data.ExtraUsage50Fired;
-        set { _data.ExtraUsage50Fired = value; }
+        get { lock (_lock) return _data.ExtraUsage50Fired; }
+        set { lock (_lock) { _data.ExtraUsage50Fired = value; Save(); } }
     }
 
     public bool ExtraUsage75Fired
     {
-        get => _data.ExtraUsage75Fired;
-        set { _data.ExtraUsage75Fired = value; }
+        get { lock (_lock) return _data.ExtraUsage75Fired; }
+        set { lock (_lock) { _data.ExtraUsage75Fired = value; Save(); } }
     }
 
     public bool ExtraUsage90Fired
     {
-        get => _data.ExtraUsage90Fired;
-        set { _data.ExtraUsage90Fired = value; }
+        get { lock (_lock) return _data.ExtraUsage90Fired; }
+        set { lock (_lock) { _data.ExtraUsage90Fired = value; Save(); } }
     }
 
     public bool ExtraUsageEnteredFired
     {
-        get => _data.ExtraUsageEnteredFired;
-        set { _data.ExtraUsageEnteredFired = value; }
+        get { lock (_lock) return _data.ExtraUsageEnteredFired; }
+        set { lock (_lock) { _data.ExtraUsageEnteredFired = value; Save(); } }
     }
 
     public List<string> DismissedPatternFindings
     {
-        get => _data.DismissedPatternFindings;
-        set { _data.DismissedPatternFindings = value; }
+        get { lock (_lock) return _data.DismissedPatternFindings; }
+        set { lock (_lock) { _data.DismissedPatternFindings = value; Save(); } }
     }
 
     public string? DismissedTierRecommendation
     {
-        get => _data.DismissedTierRecommendation;
-        set { _data.DismissedTierRecommendation = value; }
+        get { lock (_lock) return _data.DismissedTierRecommendation; }
+        set { lock (_lock) { _data.DismissedTierRecommendation = value; Save(); } }
     }
 
     public bool PromoClockEnabled
     {
-        get => _data.PromoClockEnabled;
-        set { _data.PromoClockEnabled = value; Save(); }
+        get { lock (_lock) return _data.PromoClockEnabled; }
+        set { lock (_lock) { _data.PromoClockEnabled = value; Save(); } }
     }
 
     public string? PromoClockApiKey
     {
-        get => _data.PromoClockApiKey;
-        set { _data.PromoClockApiKey = value; Save(); }
+        get { lock (_lock) return _data.PromoClockApiKey; }
+        set { lock (_lock) { _data.PromoClockApiKey = value; Save(); } }
     }
 
     public string? PromoClockTeamId
     {
-        get => _data.PromoClockTeamId;
-        set { _data.PromoClockTeamId = value; Save(); }
+        get { lock (_lock) return _data.PromoClockTeamId; }
+        set { lock (_lock) { _data.PromoClockTeamId = value; Save(); } }
     }
 
     public void Load()
     {
-        if (!File.Exists(_filePath))
+        lock (_lock)
         {
-            _data = new PreferencesData();
-            return;
-        }
+            if (!File.Exists(_filePath))
+            {
+                _data = new PreferencesData();
+                return;
+            }
 
-        try
-        {
-            var json = File.ReadAllText(_filePath);
-            _data = JsonSerializer.Deserialize<PreferencesData>(json, JsonOptions) ?? new PreferencesData();
-            Validate();
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[PreferencesManager] Failed to load preferences: {ex.Message}");
-            _data = new PreferencesData();
+            try
+            {
+                var json = File.ReadAllText(_filePath);
+                _data = JsonSerializer.Deserialize<PreferencesData>(json, JsonOptions) ?? new PreferencesData();
+                Validate();
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("PreferencesManager", $"Failed to load preferences: {ex.Message}", ex);
+
+                try
+                {
+                    var backupPath = _filePath + ".backup";
+                    File.Copy(_filePath, backupPath, overwrite: true);
+                    AppLogger.Log("PreferencesManager", $"Corrupted preferences backed up to {backupPath}");
+                }
+                catch (Exception backupEx)
+                {
+                    AppLogger.Error("PreferencesManager", $"Failed to backup corrupted preferences: {backupEx.Message}", backupEx);
+                }
+
+                _data = new PreferencesData();
+            }
         }
     }
 
     public void Save()
     {
-        try
+        lock (_lock)
         {
-            var directory = Path.GetDirectoryName(_filePath);
-            if (directory is not null)
+            try
             {
-                Directory.CreateDirectory(directory);
-            }
+                var directory = Path.GetDirectoryName(_filePath);
+                if (directory is not null)
+                {
+                    Directory.CreateDirectory(directory);
+                }
 
-            var json = JsonSerializer.Serialize(_data, JsonOptions);
-            File.WriteAllText(_filePath, json);
-            PreferencesChanged?.Invoke(this, EventArgs.Empty);
+                var json = JsonSerializer.Serialize(_data, JsonOptions);
+                File.WriteAllText(_filePath, json);
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Error("PreferencesManager", $"Failed to save preferences: {ex.Message}", ex);
+            }
         }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[PreferencesManager] Failed to save preferences: {ex.Message}");
-        }
+
+        PreferencesChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void Validate()

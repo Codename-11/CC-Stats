@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Runtime.Versioning;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -85,31 +86,35 @@ public partial class App : Application
                     _viewModel.UpdateConfirmPending = false;
                     try
                     {
-                        Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage($"Downloading {_viewModel.UpdateVersionText}...", 30000));
+                        Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage($"Downloading {_viewModel.UpdateVersionText}...", 30000, "info"));
+                        AppLogger.Log("Update", $"Downloading {_viewModel.UpdateVersionText}");
 
                         var result = await _updateCheckService.CheckForUpdateAsync();
                         if (result?.ExeDownloadUrl is null)
                         {
-                            Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage("Download URL not found.", 6000));
+                            Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage("Download URL not found.", 6000, "error"));
+                            AppLogger.Error("Update", "Download URL not found in release");
                             return;
                         }
 
                         var tempPath = await _updateCheckService.DownloadUpdateAsync(result.ExeDownloadUrl);
                         if (tempPath is not null)
                         {
-                            Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage("Installing — app will restart..."));
+                            Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage("Installing -- app will restart...", 5000, "success"));
+                            AppLogger.Log("Update", "Installing update, restarting");
                             await Task.Delay(1500);
                             UpdateCheckService.ApplyUpdateAndRestart(tempPath);
                         }
                         else
                         {
-                            Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage("Download failed. Try again later.", 6000));
+                            Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage("Download failed. Try again later.", 6000, "error"));
+                            AppLogger.Error("Update", "Download returned null");
                         }
                     }
                     catch (Exception ex)
                     {
-                        Debug.WriteLine($"[App] Update failed: {ex.Message}");
-                        Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage($"Update error: {ex.Message}", 8000));
+                        AppLogger.Error("Update", "Update failed", ex);
+                        Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage($"Update error: {ex.Message}", 8000, "error"));
                     }
                     return;
                 }
@@ -117,12 +122,14 @@ public partial class App : Application
                 // First click — check for updates and show confirmation
                 try
                 {
-                    Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage("Checking for updates...", 10000));
+                    Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage("Checking for updates...", 10000, "info"));
+                    AppLogger.Log("Update", "Checking for updates");
 
                     var checkResult = await _updateCheckService.CheckForUpdateAsync();
                     if (checkResult is null)
                     {
-                        Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage("You're on the latest version."));
+                        Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage("You're on the latest version.", 3000, "success"));
+                        AppLogger.Log("Update", "Already on latest version");
                         return;
                     }
 
@@ -131,13 +138,14 @@ public partial class App : Application
                         _viewModel.UpdateVersionText = checkResult.LatestVersion;
                         _viewModel.ShowUpdateBadge = true;
                         _viewModel.UpdateConfirmPending = true;
-                        _viewModel.ShowToastMessage($"{checkResult.LatestVersion} available — click ↑ again to install", 15000);
+                        _viewModel.ShowToastMessage($"{checkResult.LatestVersion} available -- click update again to install", 15000, "info");
                     });
+                    AppLogger.Log("Update", $"Update available: {checkResult.LatestVersion}");
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine($"[App] Update check failed: {ex.Message}");
-                    Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage($"Update check failed: {ex.Message}", 6000));
+                    AppLogger.Error("Update", "Update check failed", ex);
+                    Dispatcher.UIThread.Post(() => _viewModel.ShowToastMessage($"Update check failed: {ex.Message}", 6000, "error"));
                 }
             };
 
@@ -162,11 +170,13 @@ public partial class App : Application
                         $"ccstats-export-{DateTime.Now:yyyy-MM-dd}.csv");
                     await System.IO.File.WriteAllTextAsync(path, csv.ToString());
 
-                    Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage($"Exported {polls.Count} polls to Desktop"));
+                    AppLogger.Log("Database", $"Exported {polls.Count} polls to {path}");
+                    Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage($"Exported {polls.Count} polls to Desktop", 4000, "success"));
                 }
                 catch (Exception ex)
                 {
-                    Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage($"Export failed: {ex.Message}"));
+                    AppLogger.Error("Database", "Export failed", ex);
+                    Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage($"Export failed: {ex.Message}", 5000, "error"));
                 }
             };
 
@@ -186,15 +196,17 @@ public partial class App : Application
                         _ => $"{size / (1024.0 * 1024):F1} MB",
                     };
 
+                    AppLogger.Log("Database", $"Pruned {pruned} records older than {days} days");
                     Dispatcher.UIThread.Post(() =>
                     {
                         _viewModel!.Settings!.DatabaseSize = sizeText;
-                        _viewModel.ShowToastMessage($"Pruned {pruned} old records (kept last {days} days)");
+                        _viewModel.ShowToastMessage($"Pruned {pruned} old records (kept last {days} days)", 4000, "success");
                     });
                 }
                 catch (Exception ex)
                 {
-                    Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage($"Prune failed: {ex.Message}"));
+                    AppLogger.Error("Database", "Prune failed", ex);
+                    Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage($"Prune failed: {ex.Message}", 5000, "error"));
                 }
             };
 
@@ -249,6 +261,25 @@ public partial class App : Application
         _fiveHourSlope = new SlopeCalculationService();
         _sevenDaySlope = new SlopeCalculationService();
 
+        // Bootstrap slopes from recent DB data so trends are accurate on startup
+        try
+        {
+            var recentPolls = _database.QueryPollsAsync(
+                DateTimeOffset.UtcNow.AddMinutes(-10), DateTimeOffset.UtcNow).GetAwaiter().GetResult();
+            if (recentPolls.Count >= 2)
+            {
+                _fiveHourSlope.Bootstrap(recentPolls.Select(p => (p.FiveHourUtilization, p.Timestamp)));
+                _sevenDaySlope.Bootstrap(recentPolls
+                    .Where(p => p.SevenDayUtilization.HasValue)
+                    .Select(p => (p.SevenDayUtilization!.Value, p.Timestamp)));
+                AppLogger.Log("Startup", $"Bootstrapped slopes from {recentPolls.Count} recent polls");
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.Error("Startup", "Slope bootstrap failed", ex);
+        }
+
         // 8. Notification service
         _notificationService = new NotificationService();
 
@@ -301,26 +332,26 @@ public partial class App : Application
         try
         {
             credentials = _secureStorage.LoadCredentials();
-            Debug.WriteLine($"[App] Credentials loaded: {(credentials is not null ? "yes" : "no")}, token: {(credentials?.AccessToken is not null ? "present" : "null")}");
+            AppLogger.Log("Startup", $"Credentials: {(credentials is not null ? "found" : "none")}, token: {(credentials?.AccessToken is not null ? "present" : "missing")}");
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"[App] Failed to load credentials: {ex.Message}");
+            AppLogger.Error("Startup", "Failed to load credentials", ex);
         }
 
         // Also check account files if main credentials are missing
         if (credentials is null || string.IsNullOrEmpty(credentials.AccessToken))
         {
             var accountIds = _secureStorage.ListAccounts();
-            Debug.WriteLine($"[App] No main credentials, checking {accountIds.Count} account files");
+            AppLogger.Log("Startup", $"No active credentials, checking {accountIds.Count} account files");
             foreach (var id in accountIds)
             {
                 var acct = _secureStorage.LoadAccountCredentials(id);
                 if (acct is not null && !string.IsNullOrEmpty(acct.AccessToken))
                 {
                     credentials = acct;
-                    _secureStorage.SaveCredentials(acct); // promote to active
-                    Debug.WriteLine($"[App] Recovered credentials from account {id}");
+                    _secureStorage.SaveCredentials(acct);
+                    AppLogger.Log("Startup", $"Recovered credentials from account {id[..Math.Min(6, id.Length)]}");
                     break;
                 }
             }
@@ -347,10 +378,18 @@ public partial class App : Application
                 _inMemorySparkline.Add(localCache.FiveHourUtilization.Value);
                 _inMemorySparkline.Add(localCache.FiveHourUtilization.Value); // duplicate to meet >= 2 threshold
 
+                var cacheAge = localCache.FetchedAt.HasValue
+                    ? (int)(DateTimeOffset.UtcNow - localCache.FetchedAt.Value).TotalSeconds
+                    : (int?)null;
+                var cacheSource = cacheAge is null or <= 120
+                    ? CCStats.Core.Models.UsageSource.LocalCache
+                    : CCStats.Core.Models.UsageSource.Cached;
                 _viewModel.ApplyState(new AppState
                 {
                     OAuthState = OAuthState.Authenticated,
                     ConnectionStatus = ConnectionStatus.Connected,
+                    DataSource = cacheSource,
+                    CacheAgeSeconds = cacheAge,
                     SubscriptionTier = credentials.DisplayName
                         ?? RateLimitTierExtensions.FromString(credentials.SubscriptionType).DisplayName(),
                     FiveHour = new CCStats.Core.Models.WindowState(
@@ -363,6 +402,7 @@ public partial class App : Application
                     ExtraUsageUtilization = localCache.ExtraUsageUtilization,
                     SparklineData = _inMemorySparkline.ToArray(),
                 });
+                AppLogger.Log("Data", $"Startup from local cache ({cacheAge}s old)");
                 _trayIconService?.UpdateIcon(
                     100 - localCache.FiveHourUtilization.Value,
                     CCStats.Core.Models.HeadroomStateHelpers.FromUtilization(localCache.FiveHourUtilization),
@@ -435,11 +475,13 @@ public partial class App : Application
             {
                 if (state.FiveHour is not null)
                 {
+                    var activeAccountId = _secureStorage?.LoadCredentials()?.AccountId;
                     await _historyService!.RecordPollAsync(
                         state.FiveHour.Utilization,
                         state.SevenDay?.Utilization ?? 0,
                         state.FiveHour.ResetsAt,
-                        state.SevenDay?.ResetsAt);
+                        state.SevenDay?.ResetsAt,
+                        activeAccountId);
                 }
             }
             catch (Exception ex)
@@ -447,16 +489,19 @@ public partial class App : Application
                 Debug.WriteLine($"[App] Failed to record poll: {ex.Message}");
             }
 
-            // Get sparkline data from DB, fall back to accumulating in-memory
+            // Get sparkline data and reset events from DB
             IReadOnlyList<double> sparklineData;
+            IReadOnlyList<CCStats.Core.Models.ResetEvent> resetEvents;
             try
             {
                 sparklineData = await _historyService!.GetSparklineDataAsync();
+                resetEvents = await _historyService.GetResetEventsAsync();
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[App] Failed to fetch sparkline data: {ex.Message}");
+                Debug.WriteLine($"[App] Failed to fetch sparkline/reset data: {ex.Message}");
                 sparklineData = Array.Empty<double>();
+                resetEvents = Array.Empty<CCStats.Core.Models.ResetEvent>();
             }
 
             // If DB has no history yet, build sparkline from accumulated polls
@@ -480,10 +525,14 @@ public partial class App : Application
             }
 
             // Marshal state update to UI thread
+            var src = state.DataSource == CCStats.Core.Models.UsageSource.Api ? "API" : state.DataSource.Label();
+            AppLogger.Log("Poll", $"OK: 5h={state.FiveHour?.Utilization:F0}% 7d={state.SevenDay?.Utilization:F0}% src={src}");
             var stateWithSparkline = state with { SparklineData = sparklineData };
             Dispatcher.UIThread.Post(() =>
             {
+                _viewModel!.SetResetEvents(resetEvents);
                 _viewModel!.ApplyState(stateWithSparkline);
+                _viewModel!.SetPollingComplete();
 
                 // Detect connectivity recovery
                 if (_wasDisconnected && stateWithSparkline.ConnectionStatus == ConnectionStatus.Connected)
@@ -513,24 +562,48 @@ public partial class App : Application
           }
           catch (Exception ex)
           {
-              Debug.WriteLine($"[App] PollCompleted handler error: {ex.Message}");
+              AppLogger.Error("Poll", "PollCompleted handler error", ex);
+              // Ensure spinner clears even if handler threw before UI dispatch
+              Dispatcher.UIThread.Post(() => _viewModel!.SetPollingComplete());
           }
+        };
+
+        _pollingEngine.PollStarting += (_, _) =>
+        {
+            Dispatcher.UIThread.Post(() => _viewModel!.SetPollingActive());
         };
 
         _pollingEngine.PollFailed += (_, e) =>
         {
-            Debug.WriteLine($"[App] Poll failed: {e.Error}");
+            AppLogger.Log("Poll", $"Failed: {e.Error}");
             var state = _pollingEngine.CurrentState;
+            var nextInterval = _pollingEngine.LastComputedInterval;
             // Don't downgrade from authenticated to unauthenticated on transient failures
             // Only API 401 (TokenExpired) should trigger re-auth
             Dispatcher.UIThread.Post(() =>
             {
-                if (state.OAuthState == OAuthState.Unauthenticated && _viewModel!.IsAuthenticated)
+                // Token expired/refresh failed is a genuine auth failure — let it through
+                var isAuthFailure = state.ConnectionStatus == ConnectionStatus.TokenExpired;
+                if (state.OAuthState == OAuthState.Unauthenticated && _viewModel!.IsAuthenticated && !isAuthFailure)
                 {
-                    Debug.WriteLine("[App] Ignoring poll state downgrade — keeping authenticated");
-                    return;
+                    AppLogger.Log("Poll", "Ignoring auth state downgrade -- keeping authenticated");
+                    _viewModel!.UpdateDataSource(state.DataSource, state.CacheAgeSeconds);
                 }
-                _viewModel!.ApplyState(state);
+                else
+                {
+                    _viewModel!.ApplyState(state);
+                }
+                // Always clear the spinner and show the error, even if state downgrade was ignored
+                // Append next retry time if the engine has computed an interval
+                var errorText = e.Error;
+                if (nextInterval.TotalSeconds > 0)
+                {
+                    var label = nextInterval.TotalSeconds >= 60
+                        ? $"{nextInterval.TotalMinutes:F0}m"
+                        : $"{nextInterval.TotalSeconds:F0}s";
+                    errorText = $"{e.Error} - retry in {label}";
+                }
+                _viewModel!.SetPollingError(errorText);
             });
         };
     }
@@ -617,7 +690,7 @@ public partial class App : Application
             });
         };
 
-        _oauthService.AuthCompleted += (_, e) =>
+        _oauthService.AuthCompleted += async (_, e) =>
         {
             try
             {
@@ -639,39 +712,103 @@ public partial class App : Application
 
                 var expiresAt = DateTimeOffset.UtcNow.AddSeconds(tokenData.ExpiresIn);
 
-                // Save credentials
+                // Detect tier from profile API before saving
+                _apiClient!.SetAccessToken(tokenData.AccessToken);
+                string? resolvedTier = tokenData.SubscriptionType;
+                try
+                {
+                    var profile = await _apiClient.FetchProfileAsync(CancellationToken.None);
+                    resolvedTier = profile?.Organization?.RateLimitTier
+                                ?? profile?.Organization?.OrganizationType
+                                ?? tokenData.SubscriptionType;
+                    AppLogger.Log("Auth", $"Profile tier: {resolvedTier}");
+                }
+                catch (Exception ex)
+                {
+                    AppLogger.Error("Auth", "Profile fetch during auth failed", ex);
+                }
+
                 var credentials = new StoredCredentials
                 {
                     AccessToken = tokenData.AccessToken,
                     RefreshToken = tokenData.RefreshToken,
                     ExpiresAt = expiresAt,
-                    SubscriptionType = tokenData.SubscriptionType,
+                    SubscriptionType = resolvedTier,
                 };
-                _secureStorage!.SaveCredentials(credentials);
 
-                // Prompt user to name the account
-                Dispatcher.UIThread.Post(() =>
+                // Try to match an existing account instead of creating a duplicate
+                var existingAccounts = _secureStorage!.ListAccounts();
+                string? matchedAccountId = null;
+
+                if (existingAccounts.Count == 1)
                 {
-                    _viewModel!.PromptAccountName(credentials);
-                });
-
-                // Set API token and start polling
-                _apiClient!.SetAccessToken(tokenData.AccessToken);
-                _pollingEngine!.Start();
-
-                Dispatcher.UIThread.Post(() =>
+                    // Single account — almost certainly the same user re-authing
+                    matchedAccountId = existingAccounts[0];
+                    AppLogger.Log("Auth", $"Re-auth: matched single existing account {matchedAccountId}");
+                }
+                else if (existingAccounts.Count > 1)
                 {
-                    _viewModel!.ApplyState(new AppState
+                    // Multiple accounts — try to match by subscription type
+                    foreach (var id in existingAccounts)
                     {
-                        OAuthState = OAuthState.Authenticated,
-                        ConnectionStatus = ConnectionStatus.Disconnected,
-                        SubscriptionTier = tokenData.SubscriptionType,
+                        var existing = _secureStorage.LoadAccountCredentials(id);
+                        if (existing?.SubscriptionType == resolvedTier)
+                        {
+                            matchedAccountId = id;
+                            AppLogger.Log("Auth", $"Re-auth: matched account {id} by tier {resolvedTier}");
+                            break;
+                        }
+                    }
+                }
+
+                if (matchedAccountId is not null)
+                {
+                    // Update existing account with new tokens (preserve display name)
+                    var existing = _secureStorage.LoadAccountCredentials(matchedAccountId);
+                    var updated = credentials with
+                    {
+                        AccountId = matchedAccountId,
+                        DisplayName = existing?.DisplayName ?? RateLimitTierExtensions.FromString(resolvedTier).DisplayName(),
+                    };
+                    _secureStorage.SaveAccountCredentials(matchedAccountId, updated);
+                    _secureStorage.SaveCredentials(updated);
+                    AppLogger.Log("Auth", $"Updated existing account \"{updated.DisplayName}\"");
+
+                    // Skip naming prompt — go straight to authenticated
+                    _pollingEngine!.Start();
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        _viewModel!.ApplyState(new AppState
+                        {
+                            OAuthState = OAuthState.Authenticated,
+                            ConnectionStatus = ConnectionStatus.Disconnected,
+                            SubscriptionTier = RateLimitTierExtensions.FromString(resolvedTier).DisplayName(),
+                        });
+                        _viewModel.LoadAccounts();
+                        _viewModel.ShowToastMessage($"Welcome back, {updated.DisplayName}!", 3000, "success");
                     });
-                });
+                }
+                else
+                {
+                    // Genuinely new account — prompt for name
+                    _secureStorage.SaveCredentials(credentials);
+                    _pollingEngine!.Start();
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        _viewModel!.PromptAccountName(credentials);
+                        _viewModel!.ApplyState(new AppState
+                        {
+                            OAuthState = OAuthState.Authenticated,
+                            ConnectionStatus = ConnectionStatus.Disconnected,
+                            SubscriptionTier = RateLimitTierExtensions.FromString(resolvedTier).DisplayName(),
+                        });
+                    });
+                    AppLogger.Log("Auth", "New account — prompting for name");
+                }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"[App] OAuth token parsing failed: {ex.Message}");
+                AppLogger.Error("Auth", "OAuth token processing failed", ex);
                 Dispatcher.UIThread.Post(() =>
                 {
                     _viewModel!.ApplyState(AppState.CreatePreviewSignedOut());
@@ -723,6 +860,7 @@ public partial class App : Application
 
     public void SignOut()
     {
+        AppLogger.Log("Auth", "Signed out");
         _pollingEngine?.Stop();
         _secureStorage?.ClearCredentials();
         _fiveHourSlope?.Clear();
@@ -731,6 +869,7 @@ public partial class App : Application
 
         Dispatcher.UIThread.Post(() =>
         {
+            _viewModel?.SetPollingComplete(); // Clear spinner if poll was in-flight
             _viewModel?.ApplyState(AppState.CreatePreviewSignedOut());
         });
     }
@@ -780,6 +919,8 @@ public partial class App : Application
 
         var creds = _secureStorage.LoadAccountCredentials(accountId);
         if (creds is null || string.IsNullOrEmpty(creds.AccessToken)) return;
+
+        AppLogger.Log("Auth", $"Switching to account {accountId[..Math.Min(6, accountId.Length)]} ({creds.DisplayName})");
 
         // Stop current polling
         _pollingEngine.Stop();

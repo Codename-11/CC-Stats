@@ -18,7 +18,8 @@ public sealed class HistoricalDataService
         double fiveHourUtil,
         double sevenDayUtil,
         DateTimeOffset? fiveHourResetsAt,
-        DateTimeOffset? sevenDayResetsAt)
+        DateTimeOffset? sevenDayResetsAt,
+        string? accountId = null)
     {
         var now = DateTimeOffset.UtcNow;
 
@@ -42,7 +43,8 @@ public sealed class HistoricalDataService
             FiveHourUtilization: fiveHourUtil,
             FiveHourResetsAt: fiveHourResetsAt,
             SevenDayUtilization: sevenDayUtil,
-            SevenDayResetsAt: sevenDayResetsAt);
+            SevenDayResetsAt: sevenDayResetsAt,
+            AccountId: accountId);
 
         await _database.InsertPollAsync(poll);
     }
@@ -74,6 +76,12 @@ public sealed class HistoricalDataService
         }
 
         return result;
+    }
+
+    public async Task<IReadOnlyList<ResetEvent>> GetResetEventsAsync(int hours = 720)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return await _database.QueryResetEventsAsync(now.AddHours(-hours), now);
     }
 
     public async Task<IReadOnlyList<UsagePoll>> GetAnalyticsDataAsync(AnalyticsTimeRange timeRange)

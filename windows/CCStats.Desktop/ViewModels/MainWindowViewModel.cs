@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Reactive;
 using Avalonia.Media;
+using Avalonia.Threading;
 using CCStats.Core.Formatting;
 using CCStats.Core.Models;
 using CCStats.Core.Services;
@@ -31,6 +32,10 @@ public sealed class MainWindowViewModel : ViewModelBase
     private AnalyticsViewModel _analyticsVm;
     private bool _showAccountNaming;
     private string _newAccountName = "";
+    private bool _isPolling;
+    private string? _pollErrorText;
+    private DateTimeOffset? _lastCheckTime;
+    private readonly DispatcherTimer _freshnessTimer;
 
     // Service references (set via ConnectServices)
     private OAuthService? _oauthService;
@@ -66,9 +71,13 @@ public sealed class MainWindowViewModel : ViewModelBase
     /// </summary>
     public AnalyticsViewModel Analytics => _analyticsVm;
 
+    private IReadOnlyList<CCStats.Core.Models.ResetEvent> _resetEvents = Array.Empty<CCStats.Core.Models.ResetEvent>();
+
+    public void SetResetEvents(IReadOnlyList<CCStats.Core.Models.ResetEvent> events) => _resetEvents = events;
+
     private void RefreshAnalytics()
     {
-        _analyticsVm.UpdateData(_state.SparklineData, _state);
+        _analyticsVm.UpdateData(_state.SparklineData, _state, _resetEvents);
     }
 
     public MainWindowViewModel()
@@ -94,6 +103,11 @@ public sealed class MainWindowViewModel : ViewModelBase
         CopyStatusCommand = ReactiveCommand.Create(OnCopyStatus);
         RefreshCommand = ReactiveCommand.Create(OnRefresh);
         UpdateCommand = ReactiveCommand.Create(() => UpdateRequested?.Invoke(this, EventArgs.Empty));
+
+        // Update "X ago" freshness text every 30 seconds
+        _freshnessTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _freshnessTimer.Tick += (_, _) => RaiseFreshnessChanged();
+        _freshnessTimer.Start();
     }
 
     // --- Service connection ---
@@ -138,6 +152,25 @@ public sealed class MainWindowViewModel : ViewModelBase
         {
             _secureStorage?.RemoveAccount(accountId);
             LoadAccounts();
+            AppLogger.Log("Accounts", $"Removed account {accountId[..Math.Min(6, accountId.Length)]}");
+            ShowToastMessage("Account removed", 3000, "info");
+        };
+        _settings.AccountNameSaved += (_, args) =>
+        {
+            var existing = _secureStorage?.LoadAccountCredentials(args.AccountId);
+            if (existing is not null)
+            {
+                _secureStorage!.SaveAccountCredentials(args.AccountId, existing with { DisplayName = args.NewName });
+                // Also update active credentials if this is the current account
+                var active = _secureStorage.LoadCredentials();
+                if (active?.AccountId == args.AccountId)
+                {
+                    _secureStorage.SaveCredentials(active with { DisplayName = args.NewName });
+                }
+                AppLogger.Log("Accounts", $"Renamed account {args.AccountId[..Math.Min(6, args.AccountId.Length)]} to \"{args.NewName}\"");
+                this.RaisePropertyChanged(nameof(ActiveAccountLabel));
+                ShowToastMessage($"Saved as \"{args.NewName}\"", 3000, "success");
+            }
         };
 
         // Wire export/prune events
@@ -257,6 +290,8 @@ public sealed class MainWindowViewModel : ViewModelBase
             var named = _pendingAccountCredentials with { DisplayName = name };
             SaveAndRefreshAccount(named);
             _pendingAccountCredentials = null;
+            AppLogger.Log("Accounts", $"Account created: \"{name}\"");
+            ShowToastMessage($"Welcome, {name}!", 3000, "success");
         }
         ShowAccountNaming = false;
     }
@@ -274,48 +309,95 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     public string FiveHourTrendText => _state.FiveHourSlope switch
     {
-        SlopeLevel.Rising => "↗ Rising",
-        SlopeLevel.Steep => "⬆ Rapid",
-        _ => "→ Stable",
+        SlopeLevel.Declining => "\u2198 Declining",
+        SlopeLevel.Rising => "\u2197 Rising",
+        SlopeLevel.Steep => "\u2B06 Rapid",
+        _ => "\u2192 Stable",
     };
 
     public bool FiveHourSlopeIsActionable => _state.FiveHourSlope.IsActionable();
 
     public Color FiveHourSlopeColor => _state.FiveHourSlope switch
     {
+        SlopeLevel.Declining => HeadroomColors.Normal,
         SlopeLevel.Rising => HeadroomColors.Warning,
         SlopeLevel.Steep => HeadroomColors.Critical,
         _ => HeadroomColors.TextSecondary,
     };
 
+    /// <summary>
+    /// Contextual status line below the 5h gauge. Shows:
+    /// - Success: "On track -- Xh Ym ahead of reset" (green) when healthy
+    /// - Warning: "~Xm of active use left" (orange) when rising
+    /// - Critical: "< 5m left" (red) when nearly exhausted
+    /// </summary>
     public string FiveHourBudgetText
     {
         get
         {
             var util = _state.FiveHour?.Utilization ?? 0;
             var rate = _state.FiveHourSlopeRate;
+            var resetsAt = _state.FiveHour?.ResetsAt;
 
-            // Only show when slope is meaningfully rising (not noise)
-            if (rate < 0.3 || util >= 100) return "";
+            // Exhausted state
+            if (util >= 100) return "";
 
-            var remainingPercent = 100.0 - util;
-            var minutesLeft = remainingPercent / rate;
-
-            // Sanity: if estimate > 5h (the window itself), it's not useful
-            if (minutesLeft > 300) return "";
-            // Minimum credible estimate: at least 5 minutes
-            if (minutesLeft < 5) return "< 5m of active use left";
-            if (minutesLeft > 60)
+            // Rising: show estimated time until exhaustion
+            // (SlopeCalculationService requires 3+ samples over 2+ minutes before reporting rate > 0)
+            if (rate >= 0.3)
             {
-                var hours = (int)(minutesLeft / 60);
-                var mins = (int)(minutesLeft % 60);
-                return $"~{hours}h {mins}m of active use left";
+                var remainingPercent = 100.0 - util;
+                var minutesLeft = remainingPercent / rate;
+
+                if (minutesLeft > 300) return ""; // longer than the window, not useful
+                if (minutesLeft < 1) return "< 1m of active use left";
+                if (minutesLeft > 60)
+                {
+                    var hours = (int)(minutesLeft / 60);
+                    var mins = (int)(minutesLeft % 60);
+                    return $"~{hours}h {mins}m of active use left";
+                }
+                return $"~{(int)minutesLeft}m of active use left";
             }
-            return $"~{(int)minutesLeft}m of active use left";
+
+            // Healthy: show time margin ahead of reset
+            if (resetsAt is { } reset && util < 60)
+            {
+                var timeUntilReset = reset - DateTimeOffset.Now;
+                if (timeUntilReset.TotalMinutes > 0)
+                {
+                    var margin = FormatDuration(timeUntilReset);
+                    return $"On track -- {margin} until reset";
+                }
+            }
+
+            return "";
         }
     }
 
     public bool ShowBudgetEstimate => !string.IsNullOrEmpty(FiveHourBudgetText);
+
+    public Color FiveHourBudgetColor
+    {
+        get
+        {
+            var rate = _state.FiveHourSlopeRate;
+            if (rate >= 1.5) return HeadroomColors.Critical;
+            if (rate >= 0.3) return HeadroomColors.Warning;
+            return HeadroomColors.Normal; // success state
+        }
+    }
+
+    private static string FormatDuration(TimeSpan ts)
+    {
+        if (ts.TotalHours >= 1)
+        {
+            var h = (int)ts.TotalHours;
+            var m = ts.Minutes;
+            return m > 0 ? $"{h}h {m}m" : $"{h}h";
+        }
+        return $"{(int)ts.TotalMinutes}m";
+    }
 
     public DateTimeOffset? FiveHourResetTime => _state.FiveHour?.ResetsAt;
 
@@ -369,13 +451,15 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     public string SevenDayTrendText => _state.SevenDaySlope switch
     {
-        SlopeLevel.Rising => "↗ Rising",
-        SlopeLevel.Steep => "⬆ Rapid",
-        _ => "→ Stable",
+        SlopeLevel.Declining => "\u2198 Declining",
+        SlopeLevel.Rising => "\u2197 Rising",
+        SlopeLevel.Steep => "\u2B06 Rapid",
+        _ => "\u2192 Stable",
     };
 
     public Color SevenDaySlopeColor => _state.SevenDaySlope switch
     {
+        SlopeLevel.Declining => HeadroomColors.Normal,
         SlopeLevel.Rising => HeadroomColors.Warning,
         SlopeLevel.Steep => HeadroomColors.Critical,
         _ => HeadroomColors.TextSecondary,
@@ -570,6 +654,8 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     private string _toastMessage = "";
     private bool _showToast;
+    private string _toastType = "info"; // "success", "error", "info"
+    private int _toastGeneration; // prevents stale timers from hiding newer toasts
 
     public string ToastMessage
     {
@@ -583,19 +669,54 @@ public sealed class MainWindowViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _showToast, value);
     }
 
-    /// <summary>Shows a transient message banner that auto-hides after a delay.</summary>
-    public void ShowToastMessage(string message, int durationMs = 5000)
+    public string ToastType
     {
-        ToastMessage = message;
-        ShowToast = true;
-        // Auto-hide after duration
-        _ = HideToastAfterDelay(durationMs);
+        get => _toastType;
+        set => this.RaiseAndSetIfChanged(ref _toastType, value);
     }
 
-    private async System.Threading.Tasks.Task HideToastAfterDelay(int ms)
+    public IBrush ToastBackground => ToastType switch
+    {
+        "success" => new SolidColorBrush(Color.Parse("#E8F5E9")),
+        "error" => new SolidColorBrush(Color.Parse("#FFEBEE")),
+        _ => new SolidColorBrush(Color.Parse("#E3F2FD")),
+    };
+
+    public IBrush ToastForeground => ToastType switch
+    {
+        "success" => new SolidColorBrush(Color.Parse("#2E7D32")),
+        "error" => new SolidColorBrush(Color.Parse("#C62828")),
+        _ => new SolidColorBrush(Color.Parse("#1565C0")),
+    };
+
+    public string ToastIcon => ToastType switch
+    {
+        "success" => "\u2713",
+        "error" => "!",
+        _ => "\u2139",
+    };
+
+    /// <summary>Shows a transient toast that auto-hides. Type: "success", "error", or "info".</summary>
+    public void ShowToastMessage(string message, int durationMs = 3000, string type = "info")
+    {
+        ToastMessage = message;
+        ToastType = type;
+        this.RaisePropertyChanged(nameof(ToastBackground));
+        this.RaisePropertyChanged(nameof(ToastForeground));
+        this.RaisePropertyChanged(nameof(ToastIcon));
+        ShowToast = true;
+        var gen = ++_toastGeneration;
+        _ = HideToastAfterDelay(durationMs, gen);
+    }
+
+    private async System.Threading.Tasks.Task HideToastAfterDelay(int ms, int generation)
     {
         await System.Threading.Tasks.Task.Delay(ms);
-        Avalonia.Threading.Dispatcher.UIThread.Post(() => ShowToast = false);
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_toastGeneration == generation)
+                ShowToast = false;
+        });
     }
 
     // --- Update badge ---
@@ -649,15 +770,27 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     public bool HasMultipleAccounts => _settings?.Accounts.Count > 1;
 
+    public bool IsPolling
+    {
+        get => _isPolling;
+        private set => this.RaiseAndSetIfChanged(ref _isPolling, value);
+    }
+
     public string FreshnessText
     {
         get
         {
+            if (_isPolling)
+                return "Checking...";
+
+            if (_pollErrorText is not null)
+                return _pollErrorText;
+
             if (_state.LastUpdated is not { } lastUpdated)
                 return "Tap to refresh";
 
             var ago = DateTimeFormatting.RelativeTimeAgo(lastUpdated);
-            return $"{ago} · tap to refresh";
+            return $"{ago} \u00b7 tap to refresh";
         }
     }
 
@@ -665,15 +798,121 @@ public sealed class MainWindowViewModel : ViewModelBase
     {
         get
         {
+            if (_isPolling) return false;
+            if (_pollErrorText is not null) return true;
             if (_state.LastUpdated is not { } lastUpdated) return false;
             var elapsed = DateTimeOffset.Now - lastUpdated;
             return elapsed.TotalMinutes > 5;
         }
     }
 
-    public IBrush FreshnessColor => IsFreshnessStale
-        ? new SolidColorBrush(HeadroomColors.Caution)
-        : new SolidColorBrush(HeadroomColors.TextTertiary);
+    public IBrush FreshnessColor
+    {
+        get
+        {
+            if (_isPolling) return new SolidColorBrush(HeadroomColors.TextTertiary);
+            if (_pollErrorText is not null) return new SolidColorBrush(HeadroomColors.Caution);
+            return IsFreshnessStale
+                ? new SolidColorBrush(HeadroomColors.Caution)
+                : new SolidColorBrush(HeadroomColors.TextTertiary);
+        }
+    }
+
+    public string FreshnessTooltip
+    {
+        get
+        {
+            var lines = new List<string>();
+            // Data source
+            var src = _state.DataSource;
+            if (src != UsageSource.None)
+                lines.Add($"Source: {src.Label()} - {src.Description()}");
+            // Last synced
+            if (_state.LastUpdated is { } lu)
+                lines.Add($"Synced: {lu.ToLocalTime():MMM d, h:mm:ss tt}");
+            // Cache age
+            if (_state.CacheAgeSeconds is { } age)
+                lines.Add($"Cache age: {(age >= 60 ? $"{age / 60}m {age % 60}s" : $"{age}s")}");
+            // Last check attempt
+            if (_lastCheckTime is { } t)
+                lines.Add($"Last check: {t.ToLocalTime():h:mm:ss tt}");
+            lines.Add("Click to refresh");
+            return string.Join("\n", lines);
+        }
+    }
+
+    // --- Data source indicator ---
+
+    public string DataSourceLabel => _state.DataSource.Label();
+
+    public bool ShowDataSource => _state.DataSource != UsageSource.None && _state.IsAuthenticated;
+
+    public IBrush DataSourceColor => _state.DataSource switch
+    {
+        UsageSource.LocalCache => new SolidColorBrush(Color.Parse("#4CAF50")), // green
+        UsageSource.Api => new SolidColorBrush(Color.Parse("#4A90D9")),        // blue
+        UsageSource.Cached => new SolidColorBrush(Color.Parse("#FF9800")),     // amber
+        UsageSource.CredentialsOnly => new SolidColorBrush(Color.Parse("#FF9800")),
+        _ => new SolidColorBrush(Color.Parse("#6B7A8D")),
+    };
+
+    public IBrush DataSourceBackground => _state.DataSource switch
+    {
+        UsageSource.LocalCache => new SolidColorBrush(Color.Parse("#1A4CAF50")),
+        UsageSource.Api => new SolidColorBrush(Color.Parse("#1A4A90D9")),
+        UsageSource.Cached => new SolidColorBrush(Color.Parse("#1AFF9800")),
+        UsageSource.CredentialsOnly => new SolidColorBrush(Color.Parse("#1AFF9800")),
+        _ => new SolidColorBrush(Color.Parse("#1A6B7A8D")),
+    };
+
+    /// <summary>Call from UI thread when a poll starts.</summary>
+    public void SetPollingActive()
+    {
+        _isPolling = true;
+        _pollErrorText = null;
+        _lastCheckTime = DateTimeOffset.Now;
+        RaiseFreshnessChanged();
+    }
+
+    /// <summary>Call from UI thread when a poll completes successfully.</summary>
+    public void SetPollingComplete()
+    {
+        _isPolling = false;
+        _pollErrorText = null;
+        RaiseFreshnessChanged();
+    }
+
+    /// <summary>Call from UI thread when a poll fails (rate limit, error, etc.).</summary>
+    public void SetPollingError(string shortMessage)
+    {
+        _isPolling = false;
+        _pollErrorText = shortMessage;
+        RaiseFreshnessChanged();
+    }
+
+    /// <summary>Update just the data source indicator without a full state apply.</summary>
+    public void UpdateDataSource(UsageSource source, int? cacheAgeSeconds)
+    {
+        _state = _state with { DataSource = source, CacheAgeSeconds = cacheAgeSeconds };
+        this.RaisePropertyChanged(nameof(DataSourceLabel));
+        this.RaisePropertyChanged(nameof(ShowDataSource));
+        this.RaisePropertyChanged(nameof(DataSourceColor));
+        this.RaisePropertyChanged(nameof(DataSourceBackground));
+        this.RaisePropertyChanged(nameof(FreshnessTooltip));
+    }
+
+    private void RaiseFreshnessChanged()
+    {
+        this.RaisePropertyChanged(nameof(IsPolling));
+        this.RaisePropertyChanged(nameof(FreshnessText));
+        this.RaisePropertyChanged(nameof(IsFreshnessStale));
+        this.RaisePropertyChanged(nameof(FreshnessColor));
+        this.RaisePropertyChanged(nameof(FreshnessTooltip));
+        this.RaisePropertyChanged(nameof(DataSourceLabel));
+        this.RaisePropertyChanged(nameof(ShowDataSource));
+        this.RaisePropertyChanged(nameof(DataSourceColor));
+        this.RaisePropertyChanged(nameof(DataSourceBackground));
+    }
 
     // --- Commands ---
 
@@ -699,6 +938,7 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     private void OnRefresh()
     {
+        AppLogger.Log("Poll", "Manual refresh requested");
         RefreshRequested?.Invoke(this, EventArgs.Empty);
     }
 
@@ -922,17 +1162,6 @@ public sealed class MainWindowViewModel : ViewModelBase
                 IsActive = creds.AccessToken == activeToken,
             };
 
-            // Persist name changes when user edits the display name
-            var accountId = id; // capture for closure
-            item.NameChanged += (_, newName) =>
-            {
-                var existing = _secureStorage.LoadAccountCredentials(accountId);
-                if (existing is not null)
-                {
-                    _secureStorage.SaveAccountCredentials(accountId, existing with { DisplayName = newName });
-                }
-                this.RaisePropertyChanged(nameof(ActiveAccountLabel));
-            };
 
             _settings.Accounts.Add(item);
         }
@@ -1145,6 +1374,7 @@ public sealed class MainWindowViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(FiveHourResetAbsolute));
         this.RaisePropertyChanged(nameof(FiveHourBudgetText));
         this.RaisePropertyChanged(nameof(ShowBudgetEstimate));
+        this.RaisePropertyChanged(nameof(FiveHourBudgetColor));
 
         this.RaisePropertyChanged(nameof(ShowSevenDay));
         this.RaisePropertyChanged(nameof(SevenDayPercentage));
@@ -1186,5 +1416,10 @@ public sealed class MainWindowViewModel : ViewModelBase
         this.RaisePropertyChanged(nameof(FreshnessText));
         this.RaisePropertyChanged(nameof(IsFreshnessStale));
         this.RaisePropertyChanged(nameof(FreshnessColor));
+        this.RaisePropertyChanged(nameof(FreshnessTooltip));
+        this.RaisePropertyChanged(nameof(DataSourceLabel));
+        this.RaisePropertyChanged(nameof(ShowDataSource));
+        this.RaisePropertyChanged(nameof(DataSourceColor));
+        this.RaisePropertyChanged(nameof(DataSourceBackground));
     }
 }

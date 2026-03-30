@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CCStats.Core", "CCStats.Cor
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CCStats.Desktop", "CCStats.Desktop\CCStats.Desktop.csproj", "{D3B23448-93C5-4B98-A768-6CD308AB3FF6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CCStats.Tests", "CCStats.Tests\CCStats.Tests.csproj", "{1F44D6C0-F50B-46DF-819A-9B3BBA2C0200}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +26,9 @@ Global
 		{D3B23448-93C5-4B98-A768-6CD308AB3FF6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D3B23448-93C5-4B98-A768-6CD308AB3FF6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D3B23448-93C5-4B98-A768-6CD308AB3FF6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1F44D6C0-F50B-46DF-819A-9B3BBA2C0200}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1F44D6C0-F50B-46DF-819A-9B3BBA2C0200}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1F44D6C0-F50B-46DF-819A-9B3BBA2C0200}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1F44D6C0-F50B-46DF-819A-9B3BBA2C0200}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

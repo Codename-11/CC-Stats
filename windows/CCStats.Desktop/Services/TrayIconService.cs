@@ -182,7 +182,7 @@ public sealed class TrayIconService : IDisposable
             DrawGauge(ctx, percentage, state);
         }
 
-        using var stream = new MemoryStream();
+        var stream = new MemoryStream();
         bitmap.Save(stream);
         stream.Position = 0;
         return new WindowIcon(stream);
@@ -225,8 +225,8 @@ public sealed class TrayIconService : IDisposable
         var winHeight = (int)((window.Bounds.Height > 0 ? window.Bounds.Height : 400) * scaling);
         var gap = (int)(12 * scaling);
 
-        var x = workArea.Right - winWidth - gap;
-        var y = workArea.Bottom - winHeight - gap;
+        var x = Math.Max(workArea.X, workArea.Right - winWidth - gap);
+        var y = Math.Max(workArea.Y, workArea.Bottom - winHeight - gap);
 
         window.Position = new PixelPoint(x, y);
     }

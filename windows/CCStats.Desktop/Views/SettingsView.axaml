@@ -240,41 +240,83 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="vm:AccountItemViewModel">
                                 <Border Background="#0AFFFFFF" CornerRadius="4" Padding="10,6" Margin="0,2">
-                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" MinHeight="32">
-                                        <!-- Active indicator -->
-                                        <Ellipse Width="8" Height="8"
-                                                 VerticalAlignment="Center" Margin="0,0,10,0"
-                                                 Fill="{Binding IsActive, Converter={x:Static vm:AccountActiveColorConverter.Instance}}" />
-                                        <!-- Name (editable) + tier -->
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBox Text="{Binding DisplayName, Mode=TwoWay}"
-                                                     FontSize="12" Foreground="#F5F7FB"
-                                                     Background="Transparent" BorderThickness="0"
-                                                     Padding="0" MinHeight="0"
-                                                     Watermark="Account name" />
-                                            <TextBlock Text="{Binding TierLabel}" FontSize="10" Foreground="#6B7A8D"
-                                                       Margin="0,-2,0,0" />
-                                        </StackPanel>
-                                        <!-- Switch button (hidden if active) -->
-                                        <Button Grid.Column="2" Content="Switch"
-                                                FontSize="11" Padding="8,3" CornerRadius="3"
-                                                Background="#1A3050" Foreground="#4A90D9"
-                                                BorderThickness="0"
-                                                IsVisible="{Binding !IsActive}"
-                                                Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Settings.SwitchAccountCommand}"
-                                                CommandParameter="{Binding AccountId}"
-                                                VerticalAlignment="Center" Margin="4,0" />
-                                        <!-- Remove button -->
-                                        <Button Grid.Column="3"
-                                                FontSize="10" Padding="4,2"
-                                                Background="Transparent" Foreground="#6B7A8D"
-                                                BorderThickness="0"
-                                                Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Settings.RemoveAccountCommand}"
-                                                CommandParameter="{Binding AccountId}"
-                                                VerticalAlignment="Center">
-                                            <TextBlock Text="&#x2715;" FontSize="10" />
-                                        </Button>
-                                    </Grid>
+                                    <StackPanel Spacing="4">
+                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" MinHeight="32">
+                                            <!-- Active indicator -->
+                                            <Ellipse Width="8" Height="8"
+                                                     VerticalAlignment="Center" Margin="0,0,10,0"
+                                                     Fill="{Binding IsActive, Converter={x:Static vm:AccountActiveColorConverter.Instance}}" />
+                                            <!-- Name (display mode) + tier -->
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center"
+                                                        IsVisible="{Binding !IsEditing}">
+                                                <TextBlock Text="{Binding DisplayName}"
+                                                           FontSize="12" Foreground="#F5F7FB"
+                                                           Cursor="Hand" />
+                                                <TextBlock Text="{Binding TierLabel}" FontSize="10" Foreground="#6B7A8D"
+                                                           Margin="0,-2,0,0" />
+                                            </StackPanel>
+                                            <!-- Name (edit mode) -->
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center"
+                                                        IsVisible="{Binding IsEditing}">
+                                                <TextBox Text="{Binding EditingName, Mode=TwoWay}"
+                                                         FontSize="12" Foreground="#F5F7FB"
+                                                         Background="#1A1E26" BorderBrush="#303A48"
+                                                         BorderThickness="1" CornerRadius="3"
+                                                         Padding="4,2" MinHeight="0"
+                                                         Watermark="Account name" />
+                                            </StackPanel>
+                                            <!-- Action buttons -->
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2"
+                                                        VerticalAlignment="Center" Margin="4,0">
+                                                <!-- Rename (display mode) -->
+                                                <Button Content="Rename"
+                                                        FontSize="10" Padding="6,2" CornerRadius="3"
+                                                        Background="Transparent" Foreground="#6B7A8D"
+                                                        BorderThickness="0" Cursor="Hand"
+                                                        IsVisible="{Binding !IsEditing}"
+                                                        Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Settings.EditAccountNameCommand}"
+                                                        CommandParameter="{Binding AccountId}" />
+                                                <!-- Save (edit mode) -->
+                                                <Button Content="Save"
+                                                        FontSize="10" Padding="6,2" CornerRadius="3"
+                                                        Background="#1A3A1A" Foreground="#4CAF50"
+                                                        BorderThickness="0" Cursor="Hand"
+                                                        IsVisible="{Binding IsEditing}"
+                                                        Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Settings.SaveAccountNameCommand}"
+                                                        CommandParameter="{Binding AccountId}" />
+                                                <!-- Cancel (edit mode) -->
+                                                <Button Content="Cancel"
+                                                        FontSize="10" Padding="6,2" CornerRadius="3"
+                                                        Background="Transparent" Foreground="#6B7A8D"
+                                                        BorderThickness="0" Cursor="Hand"
+                                                        IsVisible="{Binding IsEditing}"
+                                                        Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Settings.CancelEditCommand}"
+                                                        CommandParameter="{Binding AccountId}" />
+                                                <!-- Switch button (hidden if active or editing) -->
+                                                <Panel IsVisible="{Binding !IsEditing}">
+                                                    <Button Content="Switch"
+                                                            FontSize="11" Padding="8,3" CornerRadius="3"
+                                                            Background="#1A3050" Foreground="#4A90D9"
+                                                            BorderThickness="0"
+                                                            IsVisible="{Binding !IsActive}"
+                                                            Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Settings.SwitchAccountCommand}"
+                                                            CommandParameter="{Binding AccountId}"
+                                                            VerticalAlignment="Center" />
+                                                </Panel>
+                                            </StackPanel>
+                                            <!-- Remove button -->
+                                            <Button Grid.Column="3"
+                                                    FontSize="10" Padding="4,2"
+                                                    Background="Transparent" Foreground="#6B7A8D"
+                                                    BorderThickness="0"
+                                                    IsVisible="{Binding !IsEditing}"
+                                                    Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Settings.RemoveAccountCommand}"
+                                                    CommandParameter="{Binding AccountId}"
+                                                    VerticalAlignment="Center">
+                                                <TextBlock Text="&#x2715;" FontSize="10" />
+                                            </Button>
+                                        </Grid>
+                                    </StackPanel>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

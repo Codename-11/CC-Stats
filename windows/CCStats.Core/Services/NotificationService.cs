@@ -84,6 +84,9 @@ public sealed class NotificationService
             {
                 return true;
             }
+
+            // Entry expired — remove stale cooldown
+            _cooldowns.Remove(key);
         }
 
         return false;
