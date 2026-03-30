@@ -436,9 +436,9 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Load historical sparkline data from SQLite on startup so the chart shows
-    /// real history even when polls are failing (expired token, rate limited, etc.).
-    /// Falls back to local cache seed if DB has no data.
+    /// Load historical sparkline data AND last known gauge values from SQLite on startup
+    /// so the chart and gauges show real history even when polls are failing
+    /// (expired token, rate limited, API down, etc.).
     /// </summary>
     private async Task LoadStartupSparklineAsync(StoredCredentials? credentials)
     {
@@ -448,24 +448,66 @@ public partial class App : Application
             await Task.Delay(500);
 
             var dbSparkline = await _historyService!.GetSparklineDataAsync();
-            if (dbSparkline.Count >= 2)
+
+            // Also load the most recent poll for gauge values — this ensures we show
+            // last known data instead of 0% when the API is unreachable on startup
+            var recentPolls = await _database!.QueryPollsAsync(
+                DateTimeOffset.UtcNow.AddHours(-24), DateTimeOffset.UtcNow);
+            var latestPoll = recentPolls.Count > 0 ? recentPolls[^1] : null;
+
+            if (dbSparkline.Count >= 2 || latestPoll is not null)
             {
-                AppLogger.Log("Startup", $"Loaded {dbSparkline.Count} sparkline points from DB");
-                _inMemorySparkline.Clear(); // DB has real data
+                AppLogger.Log("Startup", $"Loaded {dbSparkline.Count} sparkline points from DB" +
+                    (latestPoll is not null ? $", latest poll: 5h={latestPoll.FiveHourUtilization:F0}% 7d={latestPoll.SevenDayUtilization:F0}%" : ""));
+                if (dbSparkline.Count >= 2) _inMemorySparkline.Clear(); // DB has real data
 
                 Dispatcher.UIThread.Post(() =>
                 {
                     if (_viewModel is null) return;
                     var current = _viewModel.CurrentState;
+
+                    // Only fill in gauge values if the ViewModel doesn't already have them
+                    // (e.g., from local cache which is fresher)
+                    var fiveHour = current.FiveHour;
+                    var sevenDay = current.SevenDay;
+                    var lastUpdated = current.LastUpdated;
+
+                    if (fiveHour is null && latestPoll is not null)
+                    {
+                        fiveHour = new CCStats.Core.Models.WindowState(
+                            latestPoll.FiveHourUtilization, latestPoll.FiveHourResetsAt);
+                        sevenDay = latestPoll.SevenDayUtilization.HasValue
+                            ? new CCStats.Core.Models.WindowState(
+                                latestPoll.SevenDayUtilization.Value, latestPoll.SevenDayResetsAt)
+                            : sevenDay;
+                        lastUpdated = latestPoll.Timestamp;
+                        AppLogger.Log("Startup", "Restored gauge values from DB (no local cache)");
+                    }
+
                     _viewModel.ApplyState(current with
                     {
-                        SparklineData = dbSparkline,
+                        SparklineData = dbSparkline.Count >= 2 ? dbSparkline : current.SparklineData,
+                        FiveHour = fiveHour,
+                        SevenDay = sevenDay,
+                        LastUpdated = lastUpdated,
+                        DataSource = fiveHour != current.FiveHour
+                            ? CCStats.Core.Models.UsageSource.Cached
+                            : current.DataSource,
                     });
+
+                    // Update tray icon with restored data
+                    if (fiveHour is not null)
+                    {
+                        _trayIconService?.UpdateIcon(
+                            fiveHour.HeadroomPercentage,
+                            fiveHour.HeadroomState,
+                            $"CC-Stats — {fiveHour.HeadroomPercentage:F0}%");
+                    }
                 });
             }
             else
             {
-                AppLogger.Log("Startup", $"DB has {dbSparkline.Count} sparkline points (insufficient)");
+                AppLogger.Log("Startup", $"DB has {dbSparkline.Count} sparkline points (insufficient), no recent polls");
             }
         }
         catch (Exception ex)
@@ -627,9 +669,29 @@ public partial class App : Application
             // Only API 401 (TokenExpired) should trigger re-auth
             Dispatcher.UIThread.Post(() =>
             {
+                // Don't interfere while the user is naming a new account
+                if (_viewModel!.ShowAccountNaming)
+                {
+                    AppLogger.Log("Poll", "Skipping state update -- account naming in progress");
+                    // Still show the error text below, but don't touch auth/gauge state
+                }
+                else
+                {
                 // Never downgrade to signed-out if we have stored accounts — show
                 // "session expired" in the status instead of the sign-in screen
                 var hasStoredAccounts = _secureStorage!.ListAccounts().Count > 0;
+
+                // Preserve existing gauge values — engine state may have null FiveHour/SevenDay
+                // when polls fail before any successful poll has occurred
+                var current = _viewModel!.CurrentState;
+                var preservedState = state with
+                {
+                    FiveHour = state.FiveHour ?? current.FiveHour,
+                    SevenDay = state.SevenDay ?? current.SevenDay,
+                    SparklineData = state.SparklineData.Count > 0 ? state.SparklineData : current.SparklineData,
+                    LastUpdated = state.LastUpdated ?? current.LastUpdated,
+                };
+
                 if (state.OAuthState == OAuthState.Unauthenticated && _viewModel!.IsAuthenticated)
                 {
                     if (state.ConnectionStatus == ConnectionStatus.TokenExpired && hasStoredAccounts)
@@ -653,7 +715,7 @@ public partial class App : Application
                         var acctCreds = _secureStorage.ListAccounts()
                             .Select(id => _secureStorage.LoadAccountCredentials(id))
                             .FirstOrDefault(c => c is not null);
-                        _viewModel!.ApplyState(state with
+                        _viewModel!.ApplyState(preservedState with
                         {
                             OAuthState = OAuthState.Authenticated,
                             SubscriptionTier = acctCreds?.DisplayName ?? state.SubscriptionTier,
@@ -662,8 +724,9 @@ public partial class App : Application
                     }
                     else
                     {
-                        _viewModel!.ApplyState(state);
+                        _viewModel!.ApplyState(preservedState);
                     }
+                }
                 }
                 // Always clear the spinner and show the error, even if state downgrade was ignored
                 // Append next retry time if the engine has computed an interval
@@ -784,12 +847,13 @@ public partial class App : Application
 
                 var expiresAt = DateTimeOffset.UtcNow.AddSeconds(tokenData.ExpiresIn);
 
-                // Detect tier from profile API before saving
+                // Detect tier from profile API before saving (with timeout so auth isn't blocked by API issues)
                 _apiClient!.SetAccessToken(tokenData.AccessToken);
                 string? resolvedTier = tokenData.SubscriptionType;
                 try
                 {
-                    var profile = await _apiClient.FetchProfileAsync(CancellationToken.None);
+                    using var profileCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    var profile = await _apiClient.FetchProfileAsync(profileCts.Token);
                     resolvedTier = profile?.Organization?.RateLimitTier
                                 ?? profile?.Organization?.OrganizationType
                                 ?? tokenData.SubscriptionType;
@@ -797,7 +861,7 @@ public partial class App : Application
                 }
                 catch (Exception ex)
                 {
-                    AppLogger.Error("Auth", "Profile fetch during auth failed", ex);
+                    AppLogger.Error("Auth", "Profile fetch during auth failed (continuing without tier)", ex);
                 }
 
                 var credentials = new StoredCredentials
@@ -892,17 +956,61 @@ public partial class App : Application
                 AppLogger.Error("Auth", "OAuth token processing failed", ex);
                 Dispatcher.UIThread.Post(() =>
                 {
-                    _viewModel!.ApplyState(AppState.CreatePreviewSignedOut());
+                    // If we have stored accounts, don't reset to sign-in
+                    var hasStoredAccounts = _secureStorage!.ListAccounts().Count > 0;
+                    if (hasStoredAccounts)
+                    {
+                        var acctCreds = _secureStorage.ListAccounts()
+                            .Select(id => _secureStorage.LoadAccountCredentials(id))
+                            .FirstOrDefault(c => c is not null);
+                        _viewModel!.ApplyState(_viewModel.CurrentState with
+                        {
+                            OAuthState = OAuthState.Authenticated,
+                            ConnectionStatus = ConnectionStatus.Disconnected,
+                            SubscriptionTier = acctCreds?.DisplayName ?? _viewModel.CurrentState.SubscriptionTier,
+                        });
+                    }
+                    else
+                    {
+                        _viewModel!.ApplyState(AppState.CreatePreviewSignedOut());
+                    }
+                    _viewModel!.ShowToastMessage($"Sign-in error: {ex.Message}", 6000, "error");
                 });
             }
         };
 
         _oauthService.AuthFailed += (_, e) =>
         {
-            Debug.WriteLine($"[App] OAuth failed: {e.Error}");
+            AppLogger.Error("Auth", $"OAuth failed: {e.Error}");
             Dispatcher.UIThread.Post(() =>
             {
-                _viewModel!.ApplyState(AppState.CreatePreviewSignedOut());
+                // If user was already authenticated (e.g., adding second account), keep authenticated
+                var hasStoredAccounts = _secureStorage!.ListAccounts().Count > 0;
+                if (hasStoredAccounts && _viewModel!.IsAuthenticated)
+                {
+                    // Stay authenticated, just show the error
+                    _viewModel.ShowToastMessage($"Sign-in failed: {e.Error}", 6000, "error");
+                    AppLogger.Log("Auth", "Auth failed but keeping authenticated -- stored accounts exist");
+                }
+                else if (hasStoredAccounts)
+                {
+                    // Have accounts but not currently authenticated — restore authenticated state
+                    var acctCreds = _secureStorage.ListAccounts()
+                        .Select(id => _secureStorage.LoadAccountCredentials(id))
+                        .FirstOrDefault(c => c is not null);
+                    _viewModel!.ApplyState(_viewModel.CurrentState with
+                    {
+                        OAuthState = OAuthState.Authenticated,
+                        ConnectionStatus = ConnectionStatus.Disconnected,
+                        SubscriptionTier = acctCreds?.DisplayName ?? _viewModel.CurrentState.SubscriptionTier,
+                    });
+                    _viewModel.ShowToastMessage($"Sign-in failed: {e.Error}", 6000, "error");
+                }
+                else
+                {
+                    _viewModel!.ApplyState(AppState.CreatePreviewSignedOut());
+                    _viewModel.ShowToastMessage($"Sign-in failed: {e.Error}", 6000, "error");
+                }
             });
         };
     }
