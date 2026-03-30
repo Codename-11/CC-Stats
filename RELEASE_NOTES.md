@@ -1,21 +1,13 @@
-UX polish and multi-account fix -- dark toast theme, chart legend improvements, and PromoClock cleanup.
+Fix for sign-in screen appearing when stored accounts exist but token has expired.
 
 ## What's Changed
 
 ### Bug Fixes
-- **Multi-account OAuth** -- adding a second account no longer overwrites the first; correctly detects add-account vs re-auth flow
-- **Toast notifications** -- dark theme backgrounds with status-colored borders (was light colors jarring on dark app)
-- **Data source badge** -- renamed misleading "Live" to "Local" for cache source; CredentialsOnly gets unique purple color; added hover tooltip
-- **Chart legend** -- wraps at narrow widths instead of truncating; syncs visibility with series toggles; clearer labels ("5h reset" / "7d reset" / "Gap")
-
-### Improvements
-- **PromoClock simplified** -- settings now shows a single "Peak Hours Indicator" toggle; removed API Key and Team ID fields
-- **Badge visibility** -- increased background opacity for better contrast on dark theme
-- **Error toast icon** -- changed from ambiguous "!" to cross mark
+- **Auth state persistence** -- the app no longer shows the sign-in screen when you have a stored account but the session token has expired. Instead, the error is shown in the status line and the account context is preserved. Previously, an expired token after self-update or idle period would drop you to the sign-in screen even though your account data was intact.
 
 ## Install
 
-Download `CCStats-v0.3.1-win-x64.exe` from the assets below and run it. Self-contained -- no .NET runtime needed.
+Download `CCStats-v0.3.2-win-x64.exe` from the assets below and run it. Self-contained -- no .NET runtime needed.
 
 On first launch, CC-Stats creates a Start Menu shortcut and registers in Add/Remove Programs. To uninstall, use Add/Remove Programs or run `CCStats.exe --uninstall`.
 
