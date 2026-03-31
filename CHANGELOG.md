@@ -5,6 +5,11 @@ All notable changes to CC-Stats (Windows) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-03-30
+
+### Fixed
+- **Quotas display shows total** -- "2.8 full 5h quotas left" now shows "2.8 of 7.6 full 5h quotas left" so users have a frame of reference for their tier's total budget
+
 ## [0.4.1] - 2026-03-30
 
 ### Fixed
