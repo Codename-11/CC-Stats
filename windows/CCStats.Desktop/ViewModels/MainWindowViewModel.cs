@@ -486,12 +486,12 @@ public sealed class MainWindowViewModel : ViewModelBase
     {
         get
         {
-            if (_state.QuotasRemaining is { } quotas)
-            {
-                var rounded = Math.Round(quotas, 1);
-                return $"{rounded:0.#} full 5h quotas left";
-            }
-            return string.Empty;
+            if (_state.QuotasRemaining is not { } quotas) return string.Empty;
+            if (_state.CreditLimits is null || _state.CreditLimits.FiveHourCredits <= 0) return string.Empty;
+
+            var remaining = Math.Round(quotas, 1);
+            var total = Math.Round((double)_state.CreditLimits.SevenDayCredits / _state.CreditLimits.FiveHourCredits, 1);
+            return $"{remaining:0.#} of {total:0.#} full 5h quotas left";
         }
     }
 
