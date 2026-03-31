@@ -135,9 +135,9 @@ public sealed class OAuthService : IDisposable
                 return;
             }
 
-            _currentState = null; // Prevent state replay
+            var validatedState = _currentState;
 
-            await HandleCallbackAsync(code, redirectUri);
+            await HandleCallbackAsync(code, validatedState!, redirectUri);
         }
         catch (OperationCanceledException)
         {
@@ -153,7 +153,7 @@ public sealed class OAuthService : IDisposable
         }
     }
 
-    private async Task HandleCallbackAsync(string authCode, string redirectUri)
+    private async Task HandleCallbackAsync(string authCode, string state, string redirectUri)
     {
         try
         {
@@ -161,14 +161,22 @@ public sealed class OAuthService : IDisposable
                 ?? throw new InvalidOperationException("Code verifier is not set");
 
             using var client = new HttpClient();
+            // NOTE: Do NOT send anthropic-beta on the token endpoint — upstream doesn't,
+            // and the endpoint rejects it as "Invalid request format"
+
             var body = new Dictionary<string, string>
             {
+                ["code"] = authCode,
+                ["state"] = state,
                 ["grant_type"] = "authorization_code",
                 ["client_id"] = ClientId,
-                ["code"] = authCode,
                 ["redirect_uri"] = redirectUri,
                 ["code_verifier"] = verifier,
             };
+
+            Core.Services.AppLogger.Log("Auth",
+                $"Token exchange: endpoint={TokenEndpoint}, redirect={redirectUri}, code={authCode[..Math.Min(8, authCode.Length)]}...");
+
             var content = new StringContent(
                 System.Text.Json.JsonSerializer.Serialize(body),
                 Encoding.UTF8,
@@ -179,10 +187,15 @@ public sealed class OAuthService : IDisposable
 
             if (!response.IsSuccessStatusCode)
             {
-                AuthFailed?.Invoke(this, new AuthFailedEventArgs($"Token exchange failed: {response.StatusCode}"));
+                // Log the actual error body for debugging
+                Core.Services.AppLogger.Error("Auth",
+                    $"Token exchange failed: {response.StatusCode} — {json}");
+                AuthFailed?.Invoke(this, new AuthFailedEventArgs(
+                    $"Token exchange failed: {response.StatusCode}"));
                 return;
             }
 
+            _currentState = null; // Clear state only after successful exchange
             AuthCompleted?.Invoke(this, new AuthCompletedEventArgs(json));
         }
         catch (Exception ex)

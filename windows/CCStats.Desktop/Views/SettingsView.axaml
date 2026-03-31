@@ -267,7 +267,7 @@
                                                         IsVisible="{Binding IsEditing}"
                                                         Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Settings.CancelEditCommand}"
                                                         CommandParameter="{Binding AccountId}" />
-                                                <!-- Switch button (hidden if active or editing) -->
+                                                <!-- Switch / Re-auth button (hidden when editing) -->
                                                 <Panel IsVisible="{Binding !IsEditing}">
                                                     <Button Content="Switch"
                                                             FontSize="11" Padding="8,3" CornerRadius="3"
@@ -277,9 +277,16 @@
                                                             Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Settings.SwitchAccountCommand}"
                                                             CommandParameter="{Binding AccountId}"
                                                             VerticalAlignment="Center" />
+                                                    <Button Content="Re-auth"
+                                                            FontSize="11" Padding="8,3" CornerRadius="3"
+                                                            Background="#1A302820" Foreground="#D9A054"
+                                                            BorderThickness="0"
+                                                            IsVisible="{Binding IsActive}"
+                                                            Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).SignInCommand}"
+                                                            VerticalAlignment="Center" />
                                                 </Panel>
                                             </StackPanel>
-                                            <!-- Remove button -->
+                                            <!-- Remove button (only removes credentials, not usage history) -->
                                             <Button Grid.Column="3"
                                                     FontSize="10" Padding="4,2"
                                                     Background="Transparent" Foreground="#6B7A8D"
@@ -287,7 +294,8 @@
                                                     IsVisible="{Binding !IsEditing}"
                                                     Command="{Binding $parent[ItemsControl].((vm:MainWindowViewModel)DataContext).Settings.RemoveAccountCommand}"
                                                     CommandParameter="{Binding AccountId}"
-                                                    VerticalAlignment="Center">
+                                                    VerticalAlignment="Center"
+                                                    ToolTip.Tip="Remove credentials only (usage history is preserved)">
                                                 <TextBlock Text="&#x2715;" FontSize="10" />
                                             </Button>
                                         </Grid>
@@ -339,6 +347,45 @@
                             </MultiBinding>
                         </TextBlock.Text>
                     </TextBlock>
+                </StackPanel>
+            </Border>
+
+            <!-- Debug Log -->
+            <Border Background="#0AFFFFFF" CornerRadius="4" Padding="12,8" Margin="0,6,0,0">
+                <StackPanel Spacing="4">
+                    <Grid ColumnDefinitions="*,Auto,Auto">
+                        <Button Grid.Column="0" Content="Debug Log"
+                                Command="{Binding Settings.ToggleDebugLogCommand}"
+                                Background="Transparent" Foreground="#8FA0B8"
+                                BorderThickness="0" Padding="0"
+                                FontSize="12" HorizontalAlignment="Left"
+                                Cursor="Hand" />
+                        <Button Grid.Column="1" Content="Copy"
+                                Command="{Binding Settings.CopyLogCommand}"
+                                IsVisible="{Binding Settings.ShowDebugLog}"
+                                FontSize="10" Padding="6,2" CornerRadius="3"
+                                Background="#1A3050" Foreground="#4A90D9"
+                                BorderThickness="0" Margin="4,0" />
+                        <TextBlock Grid.Column="2" Text="&#x25BE;"
+                                   FontSize="10" Foreground="#4A5568"
+                                   VerticalAlignment="Center"
+                                   IsVisible="{Binding Settings.ShowDebugLog}" />
+                        <TextBlock Grid.Column="2" Text="&#x25B8;"
+                                   FontSize="10" Foreground="#4A5568"
+                                   VerticalAlignment="Center"
+                                   IsVisible="{Binding !Settings.ShowDebugLog}" />
+                    </Grid>
+                    <Border IsVisible="{Binding Settings.ShowDebugLog}"
+                            Background="#0D0F12" CornerRadius="4" Padding="8,6"
+                            MaxHeight="250" Margin="0,4,0,0">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Auto">
+                            <SelectableTextBlock Text="{Binding Settings.DebugLogText}"
+                                                 FontFamily="Consolas,Courier New,monospace"
+                                                 FontSize="10" Foreground="#8FA0B8"
+                                                 TextWrapping="NoWrap" />
+                        </ScrollViewer>
+                    </Border>
                 </StackPanel>
             </Border>
 

@@ -13,6 +13,15 @@ public sealed class SecureStorageService
     private readonly string _filePath;
     private readonly object _ioLock = new();
 
+    /// <summary>
+    /// Set when credential decryption fails (e.g. machine migration or user account change).
+    /// The UI layer can read this to warn the user. Call <see cref="ClearDecryptionError"/> after handling.
+    /// </summary>
+    public static string? LastDecryptionError { get; private set; }
+
+    /// <summary>Clears <see cref="LastDecryptionError"/> after the UI has shown the warning.</summary>
+    public static void ClearDecryptionError() => LastDecryptionError = null;
+
     public SecureStorageService()
         : this(GetDefaultFilePath())
     {
@@ -54,6 +63,8 @@ public sealed class SecureStorageService
     {
         lock (_ioLock)
         {
+            LastDecryptionError = null;
+
             if (!File.Exists(_filePath))
             {
                 return null;
@@ -69,6 +80,7 @@ public sealed class SecureStorageService
             }
             catch (CryptographicException ex)
             {
+                LastDecryptionError = "Credentials encrypted on a different machine or user account — please sign in again";
                 AppLogger.Error("SecureStorage", "Failed to decrypt credentials (data may be corrupt or from another user)", ex);
                 return null;
             }
@@ -79,6 +91,7 @@ public sealed class SecureStorageService
             }
             catch (Exception ex)
             {
+                LastDecryptionError = $"Failed to load credentials: {ex.Message}";
                 AppLogger.Error("SecureStorage", "Failed to load credentials", ex);
                 return null;
             }
@@ -148,6 +161,8 @@ public sealed class SecureStorageService
     {
         lock (_ioLock)
         {
+            LastDecryptionError = null;
+
             var path = GetAccountFilePath(accountId);
             if (!File.Exists(path)) return null;
             byte[]? plainBytes = null;
@@ -160,6 +175,7 @@ public sealed class SecureStorageService
             }
             catch (CryptographicException ex)
             {
+                LastDecryptionError = "Credentials encrypted on a different machine or user account — please sign in again";
                 AppLogger.Error("SecureStorage", $"Failed to decrypt account credentials for {accountId} (data may be corrupt or from another user)", ex);
                 return null;
             }
@@ -170,6 +186,7 @@ public sealed class SecureStorageService
             }
             catch (Exception ex)
             {
+                LastDecryptionError = $"Failed to load credentials: {ex.Message}";
                 AppLogger.Error("SecureStorage", $"Failed to load account credentials for {accountId}", ex);
                 return null;
             }

@@ -4,8 +4,10 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Reactive;
+using System.Text;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
+using CCStats.Core.Services;
 using ReactiveUI;
 
 namespace CCStats.Desktop.ViewModels;
@@ -144,6 +146,9 @@ public sealed class SettingsViewModel : ViewModelBase
         }
     }
 
+    private string _debugLogText = "";
+    private bool _showDebugLog;
+
     public SettingsViewModel()
     {
         ClearDatabaseCommand = ReactiveCommand.Create(OnClearDatabase);
@@ -156,6 +161,50 @@ public sealed class SettingsViewModel : ViewModelBase
         CancelEditCommand = ReactiveCommand.Create<string>(OnCancelEdit);
         ResetToDefaultsCommand = ReactiveCommand.Create(OnResetToDefaults);
         TestNotificationCommand = ReactiveCommand.Create(() => TestNotificationRequested?.Invoke(this, EventArgs.Empty));
+        CopyLogCommand = ReactiveCommand.Create(OnCopyLog);
+        ToggleDebugLogCommand = ReactiveCommand.Create(OnToggleDebugLog);
+    }
+
+    // --- Debug Log ---
+
+    public bool ShowDebugLog
+    {
+        get => _showDebugLog;
+        set => this.RaiseAndSetIfChanged(ref _showDebugLog, value);
+    }
+
+    public string DebugLogText
+    {
+        get => _debugLogText;
+        set => this.RaiseAndSetIfChanged(ref _debugLogText, value);
+    }
+
+    public ReactiveCommand<Unit, Unit> CopyLogCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleDebugLogCommand { get; }
+
+    /// <summary>Fired when the user clicks Copy to copy log text to clipboard.</summary>
+    public event EventHandler<string>? CopyLogRequested;
+
+    private void OnToggleDebugLog()
+    {
+        ShowDebugLog = !ShowDebugLog;
+        if (ShowDebugLog)
+            RefreshDebugLog();
+    }
+
+    public void RefreshDebugLog()
+    {
+        var entries = AppLogger.GetEntries();
+        var sb = new StringBuilder();
+        foreach (var entry in entries)
+            sb.AppendLine(entry.FormatLine());
+        DebugLogText = sb.ToString();
+    }
+
+    private void OnCopyLog()
+    {
+        RefreshDebugLog();
+        CopyLogRequested?.Invoke(this, DebugLogText);
     }
 
     // --- Multi-account ---

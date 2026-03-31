@@ -350,8 +350,13 @@
                             <TextBlock Text="7d" FontSize="8" Foreground="#4A5568" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="2">
-                            <Border Width="6" Height="6" Background="#40F39A4B" CornerRadius="1" VerticalAlignment="Center" />
+                            <Border Width="6" Height="6" Background="#50E6C15A" CornerRadius="1" VerticalAlignment="Center" />
                             <TextBlock Text="Reset" FontSize="8" Foreground="#4A5568" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="2"
+                                    IsVisible="{Binding ShowPeakOverlays}">
+                            <Border Width="6" Height="6" Background="#18F39A4B" CornerRadius="1" VerticalAlignment="Center" />
+                            <TextBlock Text="Peak" FontSize="8" Foreground="#4A5568" />
                         </StackPanel>
                     </StackPanel>
 

@@ -22,6 +22,7 @@ public sealed class TokenRefreshService : IDisposable
     {
         _httpClient = httpClient;
         _ownsHttpClient = ownsClient;
+        // NOTE: Do NOT send anthropic-beta on the token endpoint — upstream doesn't
     }
 
     public void Dispose()

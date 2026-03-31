@@ -19,7 +19,7 @@ Avalonia 11 + ReactiveUI + .NET 8 desktop app. Two projects in `windows/`:
 - **SizeToContent** flyout — bottom-anchored via `BoundsProperty` subscription
 
 ### Services (CCStats.Core/Services/)
-`PreferencesManager` `SecureStorageService` `OAuthService` `TokenRefreshService` `APIClient` `PollingEngine` `SlopeCalculationService` `DatabaseManager` `HistoricalDataService` `NotificationService` `UpdateCheckService` `SessionDetectionService` `LocalCacheService`
+`PreferencesManager` `SecureStorageService` `OAuthService` `TokenRefreshService` `APIClient` `PollingEngine` `SlopeCalculationService` `DatabaseManager` `HistoricalDataService` `NotificationService` `UpdateCheckService` `SessionDetectionService` `LocalCacheService` `PromoClockService` `AppLogger`
 
 ### Custom Controls (CCStats.Desktop/Controls/)
 `HeadroomRingGauge` `CountdownLabel` `ExtraUsageBar` `GaugeIcon` `HeadroomColors` `SparklineControl` `TimeRangeSelector`
@@ -34,6 +34,25 @@ dotnet run --project windows/CCStats.Desktop/CCStats.Desktop.csproj
 ```
 
 F5 in-app cycles preview states. The app auto-kills stale processes on dev restart.
+
+## Key Implementation Notes
+
+### OAuth Token Exchange
+- Token endpoint: `console.anthropic.com/v1/oauth/token` — requires JSON body with `state` field
+- Do **NOT** send `anthropic-beta` header on token/refresh endpoints (only on API calls via `APIClient`)
+- `anthropic-beta: oauth-2025-04-20` is required on usage/profile API calls only
+- Token refresh uses the same endpoint with `grant_type: refresh_token`
+
+### State Preservation
+- `PollFailed` handler must preserve existing gauge values (`FiveHour`/`SevenDay`) — engine state may have nulls
+- Re-auth flow must match existing account by active AccountId first, then single-account, then tier fallback
+- `NeedsReauth` is based on `ConnectionStatus.TokenExpired`, not string matching
+- Always call `_pollingEngine.Start()` after auth to clear `_authFailed` flag
+
+### Debug Log
+- `AppLogger` has a 500-entry ring buffer — viewable in Settings > Debug Log
+- Set `AppLogger.UiContext` during init for thread-safe `LogAdded` events
+- `SecureStorageService.LastDecryptionError` reports DPAPI failures (machine migration)
 
 ## Conventions
 

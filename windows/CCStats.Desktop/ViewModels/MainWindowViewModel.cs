@@ -180,6 +180,9 @@ public sealed class MainWindowViewModel : ViewModelBase
         // Wire test notification
         _settings.TestNotificationRequested += (_, _) => TestNotificationRequested?.Invoke(this, EventArgs.Empty);
 
+        // Wire debug log copy to clipboard
+        _settings.CopyLogRequested += (_, text) => CopyStatusRequested?.Invoke(this, text);
+
         // Wire database size (fire-and-forget)
         if (database is not null)
         {
@@ -429,12 +432,22 @@ public sealed class MainWindowViewModel : ViewModelBase
     public bool ShowPromoClock
     {
         get => _showPromoClock;
-        set => this.RaiseAndSetIfChanged(ref _showPromoClock, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _showPromoClock, value);
+            this.RaisePropertyChanged(nameof(ShowPeakOverlays));
+            this.RaisePropertyChanged(nameof(SparklineSections));
+            // Sync to analytics chart
+            _analyticsVm.ShowPeakOverlays = value;
+        }
     }
 
-    public Color PromoClockColor => _promoClockLabel.Contains("Peak")
+    public Color PromoClockColor => _promoClockLabel == "Peak"
         ? HeadroomColors.Warning    // orange for peak
         : HeadroomColors.Normal;    // green for off-peak
+
+    /// <summary>Whether peak hour overlays should be drawn on charts.</summary>
+    public bool ShowPeakOverlays => _showPromoClock;
 
     // --- 7d gauge section ---
 
@@ -548,6 +561,12 @@ public sealed class MainWindowViewModel : ViewModelBase
             var sections = new List<RectangularSection>();
             var data = _state.SparklineData;
 
+            // Peak hour overlays — subtle warm tint behind peak windows
+            if (ShowPeakOverlays && data.Count >= 2)
+            {
+                AddPeakHourBands(sections, data.Count, hoursWindow: 24);
+            }
+
             if (data.Count > 2)
             {
                 for (int i = 1; i < data.Count - 1; i++)
@@ -569,6 +588,7 @@ public sealed class MainWindowViewModel : ViewModelBase
             }
 
             // Detect reset boundaries: sharp drops in utilization (>30% drop)
+            // Gold/yellow to distinguish from amber peak hour overlays
             if (data.Count > 1)
             {
                 for (int i = 1; i < data.Count; i++)
@@ -579,13 +599,66 @@ public sealed class MainWindowViewModel : ViewModelBase
                         {
                             Xi = i - 0.5,
                             Xj = i + 0.5,
-                            Fill = new SolidColorPaint(SKColor.Parse("#40F39A4B")), // orange at 25%
+                            Fill = new SolidColorPaint(SKColor.Parse("#50E6C15A")), // gold/yellow
                         });
                     }
                 }
             }
 
             return sections.ToArray();
+        }
+    }
+
+    /// <summary>
+    /// Adds subtle peak-hour background bands to chart sections.
+    /// Peak = weekdays 9 AM – 5 PM local time. Mapped onto x-axis indices
+    /// by distributing data points evenly across the time window.
+    /// </summary>
+    private static void AddPeakHourBands(List<RectangularSection> sections, int dataCount, double hoursWindow)
+    {
+        var now = DateTimeOffset.Now;
+        var peakFill = new SolidColorPaint(SKColor.Parse("#0CF39A4B")); // orange at ~5% opacity
+
+        // Walk backwards through the time window in 1-hour steps,
+        // identify contiguous peak runs, and merge into bands
+        double? bandStart = null;
+
+        for (int h = 0; h <= (int)hoursWindow; h++)
+        {
+            var t = now.AddHours(-h);
+            var isPeak = t.DayOfWeek >= DayOfWeek.Monday
+                      && t.DayOfWeek <= DayOfWeek.Friday
+                      && t.Hour >= 9 && t.Hour < 17;
+
+            // Map hours-ago to x position (right edge = dataCount-1, left edge = 0)
+            var x = dataCount - 1 - (h / hoursWindow) * (dataCount - 1);
+
+            if (isPeak)
+            {
+                bandStart ??= x;
+            }
+            else if (bandStart is not null)
+            {
+                // End of a peak run — emit band
+                sections.Add(new RectangularSection
+                {
+                    Xi = Math.Min(x, bandStart.Value),
+                    Xj = Math.Max(x, bandStart.Value),
+                    Fill = peakFill,
+                });
+                bandStart = null;
+            }
+        }
+
+        // Close any open band at the left edge
+        if (bandStart is not null)
+        {
+            sections.Add(new RectangularSection
+            {
+                Xi = 0,
+                Xj = bandStart.Value,
+                Fill = peakFill,
+            });
         }
     }
 
@@ -784,7 +857,12 @@ public sealed class MainWindowViewModel : ViewModelBase
                 return "Checking...";
 
             if (_pollErrorText is not null)
+            {
+                // Make it clear the user can click to fix auth issues
+                if (NeedsReauth)
+                    return "Session expired \u00b7 tap to sign in";
                 return _pollErrorText;
+            }
 
             if (_state.LastUpdated is not { } lastUpdated)
                 return "Tap to refresh";
@@ -881,15 +959,27 @@ public sealed class MainWindowViewModel : ViewModelBase
     {
         _isPolling = false;
         _pollErrorText = null;
+        NeedsReauth = false;
         RaiseFreshnessChanged();
     }
 
     /// <summary>Call from UI thread when a poll fails (rate limit, error, etc.).</summary>
-    public void SetPollingError(string shortMessage)
+    public void SetPollingError(string shortMessage, ConnectionStatus connectionStatus = ConnectionStatus.Disconnected)
     {
         _isPolling = false;
         _pollErrorText = shortMessage;
+        // Use actual connection status rather than fragile string matching
+        NeedsReauth = connectionStatus == ConnectionStatus.TokenExpired;
         RaiseFreshnessChanged();
+    }
+
+    private bool _needsReauth;
+
+    /// <summary>True when the poll error indicates the user needs to re-authenticate.</summary>
+    public bool NeedsReauth
+    {
+        get => _needsReauth;
+        private set => this.RaiseAndSetIfChanged(ref _needsReauth, value);
     }
 
     /// <summary>Update just the data source indicator without a full state apply.</summary>
@@ -942,6 +1032,13 @@ public sealed class MainWindowViewModel : ViewModelBase
 
     private void OnRefresh()
     {
+        if (NeedsReauth)
+        {
+            // Token is permanently expired — trigger OAuth re-auth instead of futile poll retry
+            AppLogger.Log("Auth", "Re-auth triggered from error banner");
+            OnSignIn();
+            return;
+        }
         AppLogger.Log("Poll", "Manual refresh requested");
         RefreshRequested?.Invoke(this, EventArgs.Empty);
     }
@@ -1054,6 +1151,9 @@ public sealed class MainWindowViewModel : ViewModelBase
     {
         ShowSettings = !ShowSettings;
         this.RaisePropertyChanged(nameof(ShowMainContent));
+        // Auto-refresh debug log when settings opens with log visible
+        if (ShowSettings && _settings?.ShowDebugLog == true)
+            _settings.RefreshDebugLog();
         OpenSettingsRequested?.Invoke(this, EventArgs.Empty);
     }
 

@@ -43,6 +43,7 @@ public sealed class AnalyticsViewModel : ViewModelBase
             Stroke = new SolidColorPaint(SKColor.Parse("#66B866")) { StrokeThickness = 2 },
             GeometrySize = 0, GeometryFill = null, GeometryStroke = null,
             AnimationsSpeed = TimeSpan.FromMilliseconds(300),
+            YToolTipLabelFormatter = p => FormatTooltip("5h", p.Index, p.Model),
         };
         _sevenDayLineSeries = new LineSeries<double>
         {
@@ -56,6 +57,7 @@ public sealed class AnalyticsViewModel : ViewModelBase
             GeometrySize = 0, GeometryFill = null, GeometryStroke = null,
             LineSmoothness = 1, // smooth the line to avoid zigzag in bar mode
             AnimationsSpeed = TimeSpan.FromMilliseconds(300),
+            YToolTipLabelFormatter = p => FormatTooltip("7d", p.Index, p.Model),
         };
         _fiveHourBarSeries = new ColumnSeries<double>
         {
@@ -63,6 +65,7 @@ public sealed class AnalyticsViewModel : ViewModelBase
             Fill = new SolidColorPaint(SKColor.Parse("#66B866")),
             MaxBarWidth = 12, Padding = 2,
             AnimationsSpeed = TimeSpan.FromMilliseconds(300),
+            YToolTipLabelFormatter = p => FormatTooltip("5h avg", p.Index, p.Model),
         };
         _projectionSeries = new LineSeries<double>
         {
@@ -173,18 +176,50 @@ public sealed class AnalyticsViewModel : ViewModelBase
 
     public bool HasData => _sparklineData.Count >= 2;
 
+    // --- Peak hour overlays ---
+
+    private bool _showPeakOverlays;
+
+    /// <summary>Whether to show peak hour background bands on charts.</summary>
+    public bool ShowPeakOverlays
+    {
+        get => _showPeakOverlays;
+        set
+        {
+            if (_showPeakOverlays == value) return;
+            _showPeakOverlays = value;
+            RefreshChartSections();
+        }
+    }
+
     // --- Gap/Outage Chart Sections ---
 
     public RectangularSection[] ChartSections { get; private set; } = Array.Empty<RectangularSection>();
 
-    // Reset colors by window type
-    private static readonly SKColor ResetColor5h = SKColor.Parse("#60F39A4B");   // orange
+    // Reset colors by window type (gold/yellow to distinguish from amber peak overlays)
+    private static readonly SKColor ResetColor5h = SKColor.Parse("#60E6C15A");   // gold/yellow
     private static readonly SKColor ResetColor7d = SKColor.Parse("#604A90D9");   // blue
-    private static readonly SKColor ResetColorOther = SKColor.Parse("#60E6C15A"); // yellow
+    private static readonly SKColor ResetColorOther = SKColor.Parse("#60E6C15A"); // gold/yellow
 
     private void RefreshChartSections()
     {
         var sections = new List<RectangularSection>();
+
+        // Peak hour overlays (drawn first so they sit behind other markers)
+        if (_showPeakOverlays && _sparklineData.Count >= 2)
+        {
+            var totalHours = SelectedTimeRange switch
+            {
+                "24h" => 24.0, "7d" => 168.0, "30d" => 720.0, _ => 720.0,
+            };
+            // For bar modes use aggregated bar count for correct alignment
+            var pts = SelectedTimeRange == "24h"
+                ? _sparklineData.Count
+                : (_sparklineData.Count > 0
+                    ? AggregateToBarData(_sparklineData, SelectedTimeRange).Length
+                    : _sparklineData.Count);
+            AddPeakHourBands(sections, pts, totalHours);
+        }
 
         if (_sparklineData.Count > 2)
         {
@@ -275,6 +310,80 @@ public sealed class AnalyticsViewModel : ViewModelBase
 
         ChartSections = sections.ToArray();
         this.RaisePropertyChanged(nameof(ChartSections));
+    }
+
+    /// <summary>
+    /// Adds subtle peak-hour background bands. Peak = weekdays 9 AM – 5 PM local.
+    /// </summary>
+    private static void AddPeakHourBands(List<RectangularSection> sections, int dataCount, double hoursWindow)
+    {
+        var now = DateTimeOffset.Now;
+        var peakFill = new SolidColorPaint(SKColor.Parse("#0CF39A4B")); // orange at ~5% opacity
+        double? bandStart = null;
+
+        for (int h = 0; h <= (int)hoursWindow; h++)
+        {
+            var t = now.AddHours(-h);
+            var isPeak = t.DayOfWeek >= DayOfWeek.Monday
+                      && t.DayOfWeek <= DayOfWeek.Friday
+                      && t.Hour >= 9 && t.Hour < 17;
+
+            var x = dataCount - 1 - (h / hoursWindow) * (dataCount - 1);
+
+            if (isPeak)
+            {
+                bandStart ??= x;
+            }
+            else if (bandStart is not null)
+            {
+                sections.Add(new RectangularSection
+                {
+                    Xi = Math.Min(x, bandStart.Value),
+                    Xj = Math.Max(x, bandStart.Value),
+                    Fill = peakFill,
+                });
+                bandStart = null;
+            }
+        }
+
+        if (bandStart is not null)
+        {
+            sections.Add(new RectangularSection
+            {
+                Xi = 0,
+                Xj = bandStart.Value,
+                Fill = peakFill,
+            });
+        }
+    }
+
+    /// <summary>
+    /// Formats chart tooltip label. Appends peak/off-peak indicator when overlays are enabled.
+    /// Maps the data point index back to a wall-clock time based on the selected time range.
+    /// </summary>
+    private string FormatTooltip(string seriesLabel, int index, double model)
+    {
+        var label = $"{seriesLabel}: {model:F0}%";
+        if (!_showPeakOverlays) return label;
+
+        var totalHours = SelectedTimeRange switch
+        {
+            "24h" => 24.0, "7d" => 168.0, "30d" => 720.0, _ => 720.0,
+        };
+        var dataCount = SelectedTimeRange == "24h"
+            ? _sparklineData.Count
+            : (_sparklineData.Count > 0
+                ? AggregateToBarData(_sparklineData, SelectedTimeRange).Length
+                : _sparklineData.Count);
+        if (dataCount < 2) return label;
+
+        var hoursAgo = totalHours * (1.0 - (double)index / (dataCount - 1));
+        var t = DateTimeOffset.Now.AddHours(-hoursAgo);
+        var isPeak = t.DayOfWeek >= DayOfWeek.Monday
+                  && t.DayOfWeek <= DayOfWeek.Friday
+                  && t.Hour >= 9 && t.Hour < 17;
+
+        return $"{label} · {(isPeak ? "Peak" : "Off-Peak")}";
     }
 
     // --- LiveCharts2 Series (stored, not computed) ---

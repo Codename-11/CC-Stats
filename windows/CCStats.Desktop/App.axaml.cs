@@ -55,6 +55,9 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // Capture UI SynchronizationContext so AppLogger.LogAdded fires on UI thread
+        AppLogger.UiContext = System.Threading.SynchronizationContext.Current;
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             _viewModel = new MainWindowViewModel();
@@ -340,6 +343,15 @@ public partial class App : Application
         catch (Exception ex)
         {
             AppLogger.Error("Startup", "Failed to load credentials", ex);
+        }
+
+        // Warn user if credentials failed to decrypt (machine migration, etc.)
+        if (SecureStorageService.LastDecryptionError is not null)
+        {
+            var dpApiError = SecureStorageService.LastDecryptionError;
+            SecureStorageService.ClearDecryptionError();
+            AppLogger.Log("Startup", $"DPAPI warning: {dpApiError}");
+            Dispatcher.UIThread.Post(() => _viewModel!.ShowToastMessage(dpApiError, 8000, "error"));
         }
 
         // Also check account files if main credentials are missing
@@ -673,7 +685,8 @@ public partial class App : Application
                 if (_viewModel!.ShowAccountNaming)
                 {
                     AppLogger.Log("Poll", "Skipping state update -- account naming in progress");
-                    // Still show the error text below, but don't touch auth/gauge state
+                    // Skip state update AND error display — fresh auth is in progress
+                    return;
                 }
                 else
                 {
@@ -738,7 +751,7 @@ public partial class App : Application
                         : $"{nextInterval.TotalSeconds:F0}s";
                     errorText = $"{e.Error} - retry in {label}";
                 }
-                _viewModel!.SetPollingError(errorText);
+                _viewModel!.SetPollingError(errorText, state.ConnectionStatus);
             });
         };
     }
@@ -845,7 +858,9 @@ public partial class App : Application
                     return;
                 }
 
-                var expiresAt = DateTimeOffset.UtcNow.AddSeconds(tokenData.ExpiresIn);
+                // Default to 24h if ExpiresIn is missing/zero (prevents immediately-expired tokens)
+                var expiresInSeconds = tokenData.ExpiresIn > 0 ? tokenData.ExpiresIn : 86400;
+                var expiresAt = DateTimeOffset.UtcNow.AddSeconds(expiresInSeconds);
 
                 // Detect tier from profile API before saving (with timeout so auth isn't blocked by API issues)
                 _apiClient!.SetAccessToken(tokenData.AccessToken);
@@ -873,24 +888,34 @@ public partial class App : Application
                 };
 
                 // Determine if this is "add new account" vs "re-auth"
-                // If polling is already running, the user is authenticated and
-                // clicked "+ Add Account" from Settings — always create new.
+                // If polling is already running AND the user isn't re-authing an expired session,
+                // they clicked "+ Add Account" from Settings — create new.
                 var existingAccounts = _secureStorage!.ListAccounts();
-                var isAddingNewAccount = _pollingEngine!.IsRunning && existingAccounts.Count > 0;
+                var isReauth = _viewModel!.NeedsReauth;
+                var isAddingNewAccount = _pollingEngine!.IsRunning && existingAccounts.Count > 0 && !isReauth;
 
                 string? matchedAccountId = null;
 
                 if (!isAddingNewAccount && existingAccounts.Count > 0)
                 {
                     // Re-auth flow: try to match an existing account
-                    if (existingAccounts.Count == 1)
+                    // Priority: 1) currently active account, 2) single account, 3) tier match
+                    var activeCredentials = _secureStorage.LoadCredentials();
+                    if (activeCredentials?.AccountId is not null
+                        && existingAccounts.Contains(activeCredentials.AccountId))
+                    {
+                        // Best match: the currently active account
+                        matchedAccountId = activeCredentials.AccountId;
+                        AppLogger.Log("Auth", $"Re-auth: matched active account {matchedAccountId}");
+                    }
+                    else if (existingAccounts.Count == 1)
                     {
                         matchedAccountId = existingAccounts[0];
                         AppLogger.Log("Auth", $"Re-auth: matched single existing account {matchedAccountId}");
                     }
                     else
                     {
-                        // Multiple accounts — try to match by subscription type
+                        // Fallback: match by subscription type
                         foreach (var id in existingAccounts)
                         {
                             var existing = _secureStorage.LoadAccountCredentials(id);
@@ -921,7 +946,9 @@ public partial class App : Application
                     _pollingEngine!.Start();
                     Dispatcher.UIThread.Post(() =>
                     {
-                        _viewModel!.ApplyState(new AppState
+                        // Preserve existing gauge data from cache/DB during re-auth
+                        var current = _viewModel!.CurrentState;
+                        _viewModel!.ApplyState(current with
                         {
                             OAuthState = OAuthState.Authenticated,
                             ConnectionStatus = ConnectionStatus.Disconnected,
@@ -933,10 +960,13 @@ public partial class App : Application
                 }
                 else
                 {
-                    // Genuinely new account — prompt for name
+                    // Genuinely new account — generate AccountId now so polls during
+                    // the naming prompt are recorded with the correct account
+                    var newAccountId = Guid.NewGuid().ToString("N")[..8];
+                    credentials = credentials with { AccountId = newAccountId };
                     _secureStorage.SaveCredentials(credentials);
-                    if (!_pollingEngine!.IsRunning)
-                        _pollingEngine.Start();
+                    // Always restart polling to clear _authFailed flag from expired sessions
+                    _pollingEngine!.Start();
                     Dispatcher.UIThread.Post(() =>
                     {
                         _viewModel!.ShowSettings = false; // close settings to show naming prompt
