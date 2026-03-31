@@ -5,6 +5,32 @@ All notable changes to CC-Stats (Windows) will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-03-30
+
+### Added
+- **Peak hour chart overlays** -- subtle amber background bands on sparkline and analytics charts during weekday 9AM-5PM windows (toggle in Settings > Peak Hours Indicator)
+- **Chart tooltip peak context** -- hovering data points shows "Peak" or "Off-Peak" when overlays are enabled
+- **Debug log viewer** -- collapsible log panel in Settings with copy-to-clipboard, monospace selectable text (500-entry ring buffer)
+- **Re-auth from error banner** -- "Session expired · tap to sign in" footer text triggers OAuth directly
+- **Re-auth button in Settings** -- amber "Re-auth" button next to active account
+- **DPAPI migration warning** -- toast notification when credentials can't be decrypted (machine/user change)
+- **Account removal safety tooltip** -- "Remove credentials only (usage history is preserved)"
+
+### Fixed
+- **OAuth token exchange BadRequest** -- re-added `state` to token exchange body and removed `anthropic-beta` header from token endpoint (matching upstream)
+- **Token refresh failing** -- same `anthropic-beta` header removal fix applied to refresh endpoint
+- **Off-Peak badge showing orange** -- `Contains("Peak")` matched "Off-Peak"; fixed to exact `== "Peak"` check
+- **Reset vs peak overlay colors** -- reset markers changed to gold/yellow to distinguish from amber peak overlays
+- **Re-auth creates duplicate account** -- re-auth now matches active account by ID, not fragile tier string
+- **Polling frozen after re-auth** -- `_authFailed` flag now always cleared when auth completes
+- **NeedsReauth fragile string matching** -- now based on `ConnectionStatus.TokenExpired`
+- **AccountId null during naming** -- generated immediately on new account auth
+- **OAuth state cleared too early** -- now cleared only after successful token exchange (retry-safe)
+- **ExpiresIn=0 creates expired token** -- defaults to 24h if missing/zero
+- **PollFailed during naming flow** -- fully skipped to prevent state interference
+- **Duplicate log lines** -- single stderr output path (was writing via both Debug.WriteLine and Console.Error)
+- **LogAdded cross-thread crash** -- marshaled to UI thread via SynchronizationContext
+
 ## [0.3.4] - 2026-03-30
 
 ### Fixed
