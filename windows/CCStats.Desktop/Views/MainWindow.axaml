@@ -99,19 +99,21 @@
                     Background="{Binding ToastBackground}"
                     BorderBrush="{Binding ToastForeground}" BorderThickness="1"
                     CornerRadius="14" Padding="12,6"
-                    Margin="40,2,40,2"
+                    Margin="16,2,16,2"
                     HorizontalAlignment="Center"
+                    MaxWidth="288"
                     BoxShadow="0 2 8 0 #40000000">
-                <StackPanel Orientation="Horizontal" Spacing="6"
-                            HorizontalAlignment="Center">
-                    <TextBlock Text="{Binding ToastIcon}"
+                <Grid ColumnDefinitions="Auto,*">
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding ToastIcon}"
                                FontSize="12" FontWeight="Bold"
                                Foreground="{Binding ToastForeground}"
-                               VerticalAlignment="Center" />
-                    <TextBlock Text="{Binding ToastMessage}"
+                               VerticalAlignment="Top" Margin="0,0,6,0" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding ToastMessage}"
                                FontSize="11" Foreground="{Binding ToastForeground}"
                                TextWrapping="Wrap" VerticalAlignment="Center" />
-                </StackPanel>
+                </Grid>
             </Border>
 
             <!-- ═══ Authenticated content (only when signed in + not in settings) ═══ -->
